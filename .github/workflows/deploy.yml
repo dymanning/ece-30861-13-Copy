@@ -32,3 +32,13 @@ jobs:
         run: |
           echo "Running flake8 placeholder..."
           flake8 . || echo "No linting errors"
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs: build-and-test
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Run placeholder deploy script
+        run: bash deploy/deploy.sh
