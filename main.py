@@ -9,7 +9,7 @@ Summary
 - Delegates handling to the URL factory and model handler.
 - Orchestrates metric execution and output generation.
 """
-
+# Phase 1 Imports
 import multiprocessing as mp
 import sys
 import time
@@ -28,7 +28,25 @@ from src.metrics.performance_claims import PerformanceClaimsMetric
 from src.metrics.ramp_up_time import RampUpTimeMetric
 from src.metrics.size import SizeMetric
 
+# CloudWatch Logging Setup
+import logging
+import watchtower
+import boto3
 
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+
+session = boto3.Session()
+handler = watchtower.CloudWatchLogHandler(
+    log_group="TrustworthyRegistryLogs",
+    stream_name="app-stream",
+    boto3_session=session
+)
+logger.addHandler(handler)
+logger.info("Application started successfully.")
+
+
+# Phase 1 Implementation
 def run_metric(metric: Any) -> Any:
     metric.run()
     return metric
