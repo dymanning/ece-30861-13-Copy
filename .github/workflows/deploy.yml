@@ -40,5 +40,11 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::654211779129:role/github-actions-deploy
+          aws-region: us-east-2
+
       - name: Run placeholder deploy script
         run: bash deploy/deploy.sh
