@@ -157,4 +157,4 @@ def remove_package(pkg_id: int, db: Session = Depends(get_db)):
     except SQLAlchemyError:
         raise HTTPException(status_code=500, detail="Failed to delete package from DB")
 
-    return JSONResponse(status_code=status.HTTP_204_NO_CONTENT, content=None)
+    return
