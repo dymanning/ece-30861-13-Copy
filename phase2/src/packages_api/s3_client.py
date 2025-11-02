@@ -39,9 +39,12 @@ class S3Client:
     def key_from_uri(uri: str) -> str:
         # expect s3://bucket/key
         if uri.startswith("s3://"):
-            parts = uri.split("/", 3)
-            if len(parts) >= 4:
-                return parts[3]
-            if len(parts) == 3:
-                return parts[2]
+            # Remove 's3://'
+            path = uri[5:]
+            # Split into bucket and key
+            parts = path.split('/', 1)
+            if len(parts) == 2:
+                return parts[1]
+            # No key present
+            return ""
         return uri
