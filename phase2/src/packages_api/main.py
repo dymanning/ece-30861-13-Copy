@@ -79,7 +79,10 @@ def download_package(
     s3_key = S3Client.key_from_uri(pkg.s3_uri)
 
     if component:
-        comp_key = s3_key.replace(".zip", f"_{component}.zip")
+        if s3_key.endswith(".zip"):
+            comp_key = s3_key[:-4] + f"_{component}.zip"
+        else:
+            comp_key = s3_key + f"_{component}.zip"
         try:
             body = s3.download_stream(comp_key)
         except Exception:
