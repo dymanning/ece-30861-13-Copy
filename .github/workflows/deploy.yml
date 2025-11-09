@@ -25,8 +25,12 @@ jobs:
 
       - name: Run tests
         run: |
-          echo "Running placeholder tests..."
-          pytest || echo "Tests not configured yet"
+          echo "Running tests..."
+          export PYTHONPATH=$PYTHONPATH:$(pwd)/phase1
+          pytest phase1/tests
+
+          export PYTHONPATH=$PYTHONPATH:$(pwd)/phase2
+          pytest phase2/tests
 
       - name: Lint
         run: |
