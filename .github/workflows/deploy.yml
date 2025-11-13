@@ -22,7 +22,7 @@ jobs:
         run: |
           pip install -r requirements.txt || true
           pip install pytest flake8 PyGithub requests huggingface_hub|| true
-          pip install fastapi boto3
+          pip install fastapi boto3 sqlalchemy
 
       - name: Run tests
         env:
