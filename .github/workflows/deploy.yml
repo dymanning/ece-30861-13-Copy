@@ -32,7 +32,7 @@ jobs:
           pytest phase1/tests
 
           export PYTHONPATH=$PYTHONPATH:$(pwd)/phase2
-          pytest phase2/tests
+          pytest tests
 
       - name: Lint
         run: |
