@@ -25,7 +25,7 @@ jobs:
 
       - name: Run tests
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.PHASE2_TOKEN }}
         run: |
           echo "Running tests..."
           export PYTHONPATH=$PYTHONPATH:$(pwd)/phase1
@@ -54,7 +54,7 @@ jobs:
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
-          aws-region: ${{ secrets.AWS_REGION }}
+          aws-region: ${{ vars.AWS_REGION }}
 
       - name: Run placeholder deploy script
         run: bash deploy/deploy.sh
