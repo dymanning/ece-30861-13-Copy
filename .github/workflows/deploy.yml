@@ -24,6 +24,8 @@ jobs:
           pip install pytest flake8 PyGithub requests huggingface_hub|| true
 
       - name: Run tests
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           echo "Running tests..."
           export PYTHONPATH=$PYTHONPATH:$(pwd)/phase1
