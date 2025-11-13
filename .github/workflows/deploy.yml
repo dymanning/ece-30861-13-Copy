@@ -42,7 +42,7 @@ jobs:
           flake8 phase1/src phase1/tests
 
           export PYTHONPATH=$PYTHONPATH:$(pwd)/phase2
-          flake8 phase2/src phase2/tests || echo "No linting errors in phase2"
+          flake8 phase2/src tests
 
   deploy:
     runs-on: ubuntu-latest
