@@ -21,7 +21,7 @@ jobs:
       - name: Install dependencies
         run: |
           pip install -r requirements.txt || true
-          pip install pytest flake8 || true
+          pip install pytest flake8 PyGithub requests huggingface_hub|| true
 
       - name: Run tests
         run: |
