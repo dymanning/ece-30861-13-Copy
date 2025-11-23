@@ -1,6 +1,5 @@
 Flask>=2.0
 requests>=2.25
-python-dotenv>=0.19
 
 # Cleaned up duplicate entries
 python-dotenv>=0.20
