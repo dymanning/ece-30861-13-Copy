@@ -11,6 +11,13 @@ load_dotenv()
 app = Flask(__name__, static_folder="static", template_folder="templates")
 app.secret_key = os.environ.get("FLASK_SECRET", "dev-secret")
 
+# Recommended production cookie settings (can be overridden via env)
+app.config.update(
+    SESSION_COOKIE_HTTPONLY=os.environ.get("SESSION_COOKIE_HTTPONLY", "True") == "True",
+    SESSION_COOKIE_SECURE=os.environ.get("SESSION_COOKIE_SECURE", "False") == "True",
+    SESSION_COOKIE_SAMESITE=os.environ.get("SESSION_COOKIE_SAMESITE", "Lax"),
+)
+
 # External JWT API base URL (expected to expose /auth/login and /auth/register and a verify endpoint)
 JWT_API_URL = os.environ.get("JWT_API_URL", "http://localhost:5001")
 # Endpoint path used to verify token / fetch current user (default: /auth/me)
@@ -55,6 +62,42 @@ def login_required(fn):
         return fn(*args, **kwargs)
 
     return wrapper
+
+
+def role_required(role: str):
+    """Decorator to restrict access to users that have a given role in their user info.
+    The external auth verify endpoint is expected to return a JSON object with a `roles`
+    list or a `role` string. If verification fails or role is missing, redirect to login.
+    """
+
+    def decorator(fn):
+        @wraps(fn)
+        def wrapper(*args, **kwargs):
+            user = verify_token()
+            if not user:
+                flash("Please sign in to access that page.", "warning")
+                return redirect(url_for("login", next=request.path))
+
+            # roles may be a list or a single string
+            roles = user.get("roles") or user.get("role")
+            if roles is None:
+                flash("You do not have permission to access that page.", "danger")
+                return redirect(url_for("index"))
+
+            if isinstance(roles, str):
+                has_role = roles == role
+            else:
+                has_role = role in roles
+
+            if not has_role:
+                flash("You do not have permission to access that page.", "danger")
+                return redirect(url_for("index"))
+
+            return fn(*args, **kwargs)
+
+        return wrapper
+
+    return decorator
 
 
 @app.route("/")
@@ -116,6 +159,27 @@ def logout():
 def dashboard():
     user = verify_token()
     return render_template("dashboard.html", user=user)
+
+
+@app.route("/admin")
+@role_required("admin")
+def admin():
+    user = verify_token()
+    return render_template("dashboard.html", user=user)
+
+
+@app.errorhandler(404)
+def not_found(err):
+    return render_template("error.html", title="Not Found", message="The requested page was not found."), 404
+
+
+@app.errorhandler(500)
+def server_error(err):
+    return render_template(
+        "error.html",
+        title="Server Error",
+        message=(str(err) or "An internal server error occurred."),
+    ), 500
 
 
 if __name__ == "__main__":
