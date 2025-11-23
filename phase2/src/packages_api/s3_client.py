@@ -65,7 +65,7 @@ class S3Client:
                 if str(rel).startswith(prefix):
                     try:
                         p.unlink()
-                    except Exception:
+                    except FileNotFoundError:
                         pass
             return
 
