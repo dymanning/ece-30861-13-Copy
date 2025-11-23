@@ -1,0 +1,115 @@
+import os
+import sqlite3
+import hashlib
+import time
+import bcrypt
+import uuid
+import sys
+
+DB_PATH = os.path.join(os.path.dirname(__file__), "phase2.db")
+
+DEFAULT_ADMIN = {
+    "username": "ece30861defaultadminuser",
+    "password": "correcthorsebatterystaple123(!__+@**(A;DROP TABLE packages",
+    "role": "admin",
+    "permissions": "upload,search,download"
+}
+
+def hash_password(password: str) -> str:
+    salt = bcrypt.gensalt()
+    hashed = bcrypt.hashpw(password.encode("utf-8"), salt)
+    return hashed.decode("utf-8")
+
+def verify_password(password: str, stored: str) -> bool:
+    try:
+        return bcrypt.checkpw(password.encode("utf-8"), stored.encode("utf-8"))
+    except Exception:
+        # If stored hash is not bcrypt-compatible, treat as verification failure
+        return False
+
+def get_conn():
+    os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
+    return sqlite3.connect(DB_PATH)
+
+def create_tables():
+    with get_conn() as conn:
+        c = conn.cursor()
+        c.execute("""
+        CREATE TABLE IF NOT EXISTS roles (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT UNIQUE NOT NULL,
+            can_upload INTEGER NOT NULL DEFAULT 0,
+            can_search INTEGER NOT NULL DEFAULT 1,
+            can_download INTEGER NOT NULL DEFAULT 1,
+            is_admin INTEGER NOT NULL DEFAULT 0
+        )
+        """)
+        c.execute("""
+        CREATE TABLE IF NOT EXISTS users (
+            id TEXT PRIMARY KEY,
+            username TEXT UNIQUE NOT NULL,
+            passwordHash TEXT NOT NULL,
+            role TEXT NOT NULL,
+            permissions TEXT,
+            createdAt REAL NOT NULL,
+            updatedAt REAL NOT NULL
+        )
+        """)
+        conn.commit()
+
+def seed_roles():
+    roles = [
+        ("admin", 1, 1, 1, 1),
+        ("uploader", 1, 1, 1, 0),
+        ("viewer", 0, 1, 1, 0)
+    ]
+    with get_conn() as conn:
+        c = conn.cursor()
+        for name, up, se, do, adm in roles:
+            c.execute("""
+            INSERT OR IGNORE INTO roles (name, can_upload, can_search, can_download, is_admin)
+            VALUES (?, ?, ?, ?, ?)
+            """, (name, up, se, do, adm))
+        conn.commit()
+
+def seed_default_admin():
+    pw_hash = hash_password(DEFAULT_ADMIN["password"])
+    now = time.time()
+    uid = str(uuid.uuid4())
+    with get_conn() as conn:
+        c = conn.cursor()
+        c.execute("SELECT id FROM users WHERE username = ?", (DEFAULT_ADMIN["username"],))
+        if c.fetchone():
+            print("Default admin already exists.")
+            return
+        c.execute("""
+        INSERT INTO users (id, username, passwordHash, role, permissions, createdAt, updatedAt)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+        """, (
+            uid,
+            DEFAULT_ADMIN["username"],
+            pw_hash,
+            DEFAULT_ADMIN["role"],
+            DEFAULT_ADMIN["permissions"],
+            now,
+            now
+        ))
+        conn.commit()
+        print("Seeded default admin user:", DEFAULT_ADMIN["username"])
+
+def main(force: bool = False):
+    if force and os.path.exists(DB_PATH):
+        try:
+            os.remove(DB_PATH)
+            print("Removed existing DB for force reseed:", DB_PATH)
+        except Exception as e:
+            print("Failed to remove DB for force reseed:", e)
+    create_tables()
+    seed_roles()
+    seed_default_admin()
+    print("DB initialized at:", DB_PATH)
+    print("To verify, use sqlite3 or open the DB with a client.")
+
+if __name__ == "__main__":
+    force_flag = "--force" in sys.argv or "-f" in sys.argv
+    main(force=force_flag)
