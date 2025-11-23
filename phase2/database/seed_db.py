@@ -4,6 +4,7 @@ import hashlib
 import time
 import bcrypt
 import uuid
+import sys
 
 DB_PATH = os.path.join(os.path.dirname(__file__), "phase2.db")
 
@@ -96,7 +97,13 @@ def seed_default_admin():
         conn.commit()
         print("Seeded default admin user:", DEFAULT_ADMIN["username"])
 
-def main():
+def main(force: bool = False):
+    if force and os.path.exists(DB_PATH):
+        try:
+            os.remove(DB_PATH)
+            print("Removed existing DB for force reseed:", DB_PATH)
+        except Exception as e:
+            print("Failed to remove DB for force reseed:", e)
     create_tables()
     seed_roles()
     seed_default_admin()
@@ -104,4 +111,5 @@ def main():
     print("To verify, use sqlite3 or open the DB with a client.")
 
 if __name__ == "__main__":
-    main()
+    force_flag = "--force" in sys.argv or "-f" in sys.argv
+    main(force=force_flag)
