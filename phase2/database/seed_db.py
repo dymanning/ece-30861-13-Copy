@@ -2,6 +2,8 @@ import os
 import sqlite3
 import hashlib
 import time
+import bcrypt
+import uuid
 
 DB_PATH = os.path.join(os.path.dirname(__file__), "phase2.db")
 
@@ -12,17 +14,17 @@ DEFAULT_ADMIN = {
     "permissions": "upload,search,download"
 }
 
-def hash_password(password: str, salt: bytes = None) -> str:
-    if salt is None:
-        salt = os.urandom(16)
-    dk = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt, 200_000)
-    return salt.hex() + ":" + dk.hex()
+def hash_password(password: str) -> str:
+    salt = bcrypt.gensalt()
+    hashed = bcrypt.hashpw(password.encode("utf-8"), salt)
+    return hashed.decode("utf-8")
 
 def verify_password(password: str, stored: str) -> bool:
-    salt_hex, dk_hex = stored.split(":")
-    salt = bytes.fromhex(salt_hex)
-    dk = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt, 200_000)
-    return dk.hex() == dk_hex
+    try:
+        return bcrypt.checkpw(password.encode("utf-8"), stored.encode("utf-8"))
+    except Exception:
+        # If stored hash is not bcrypt-compatible, treat as verification failure
+        return False
 
 def get_conn():
     os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
@@ -43,12 +45,13 @@ def create_tables():
         """)
         c.execute("""
         CREATE TABLE IF NOT EXISTS users (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id TEXT PRIMARY KEY,
             username TEXT UNIQUE NOT NULL,
-            password_hash TEXT NOT NULL,
+            passwordHash TEXT NOT NULL,
             role TEXT NOT NULL,
             permissions TEXT,
-            created_at REAL NOT NULL
+            createdAt REAL NOT NULL,
+            updatedAt REAL NOT NULL
         )
         """)
         conn.commit()
@@ -71,6 +74,7 @@ def seed_roles():
 def seed_default_admin():
     pw_hash = hash_password(DEFAULT_ADMIN["password"])
     now = time.time()
+    uid = str(uuid.uuid4())
     with get_conn() as conn:
         c = conn.cursor()
         c.execute("SELECT id FROM users WHERE username = ?", (DEFAULT_ADMIN["username"],))
@@ -78,13 +82,15 @@ def seed_default_admin():
             print("Default admin already exists.")
             return
         c.execute("""
-        INSERT INTO users (username, password_hash, role, permissions, created_at)
-        VALUES (?, ?, ?, ?, ?)
+        INSERT INTO users (id, username, passwordHash, role, permissions, createdAt, updatedAt)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
         """, (
+            uid,
             DEFAULT_ADMIN["username"],
             pw_hash,
             DEFAULT_ADMIN["role"],
             DEFAULT_ADMIN["permissions"],
+            now,
             now
         ))
         conn.commit()
