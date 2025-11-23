@@ -1,0 +1,11 @@
+Flask>=2.0
+requests>=2.25
+
+# Cleaned up duplicate entries
+python-dotenv>=0.20
+
+# Testing / browser automation
+pytest>=7.0
+selenium>=4.0
+webdriver-manager>=4.0
+
