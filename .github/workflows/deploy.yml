@@ -58,6 +58,12 @@ jobs:
           aws-region: ${{ vars.AWS_REGION }}
           audience: sts.amazonaws.com
 
+      - name: Debug OIDC token
+        run: |
+          echo "Debugging OIDC token..."
+          curl -H "Authorization: Bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+               "$ACTIONS_ID_TOKEN_REQUEST_URL"
+
       - name: Run deploy script
         run: bash deploy/deploy.sh
 
