@@ -1,0 +1,13 @@
+{% extends 'base.html' %}
+
+{% block title %}Dashboard{% endblock %}
+
+{% block content %}
+  <h2>Dashboard</h2>
+  {% if user %}
+    <p>Welcome back, <strong>{{ user.get('email') or user.get('username') or 'user' }}</strong>.</p>
+    <pre>{{ user | tojson(indent=2) }}</pre>
+  {% else %}
+    <p>User information is not available.</p>
+  {% endif %}
+{% endblock %}
