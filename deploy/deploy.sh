@@ -1,3 +1,56 @@
+#!/usr/bin/env bash
+# Idempotent deploy script to run on EC2 instances
+# Expected to be invoked by SSM after the artifact is downloaded and unzipped to /tmp/deploy
+
+set -euo pipefail
+
+APP_DIR="/home/ec2-user/app"
+SERVICE_NAME="phase2"
+
+echo "Starting deploy script: $(date)"
+echo "App dir: $APP_DIR"
+
+# If an unpacked artifact exists in /tmp/deploy, use it; otherwise try git pull in APP_DIR
+if [ -d /tmp/deploy ] && [ "$(ls -A /tmp/deploy)" ]; then
+  echo "Found unpacked artifact in /tmp/deploy — syncing to $APP_DIR"
+  mkdir -p "$APP_DIR"
+  # Use rsync if available for safe sync; fall back to cp
+  if command -v rsync >/dev/null 2>&1; then
+    rsync -a --delete /tmp/deploy/ "$APP_DIR/"
+  else
+    cp -R /tmp/deploy/* "$APP_DIR/"
+  fi
+else
+  if [ -d "$APP_DIR/.git" ]; then
+    echo "No artifact found; performing git fetch and reset in $APP_DIR"
+    cd "$APP_DIR"
+    git fetch --all --prune
+    git reset --hard origin/main
+  else
+    echo "No artifact and no git repository at $APP_DIR. Nothing to deploy." >&2
+    exit 1
+  fi
+fi
+
+cd "$APP_DIR"
+
+# Install Python requirements if present (non-fatal)
+if [ -f requirements.txt ]; then
+  echo "Installing Python requirements (if pip available)"
+  if command -v pip3 >/dev/null 2>&1; then
+    pip3 install -r requirements.txt || true
+  fi
+fi
+
+echo "Restarting systemd service: $SERVICE_NAME"
+if sudo systemctl is-enabled "$SERVICE_NAME" >/dev/null 2>&1; then
+  sudo systemctl restart "$SERVICE_NAME"
+else
+  echo "Service $SERVICE_NAME is not enabled. Trying to start it." 
+  sudo systemctl start "$SERVICE_NAME" || true
+fi
+
+echo "Deploy completed at: $(date)"
 #!/bin/bash
 set -e
 

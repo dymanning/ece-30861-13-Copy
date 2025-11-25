@@ -1,5 +1,9 @@
 name: CI Pipeline
 
+permissions:
+  id-token: write
+  contents: read
+
 on:
   pull_request:
     branches: [ "main" ]
@@ -12,6 +16,13 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (for uploading artifacts)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          aws-region: ${{ vars.AWS_REGION }}
+          audience: sts.amazonaws.com
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -34,6 +45,19 @@ jobs:
 
           export PYTHONPATH=$PYTHONPATH:$(pwd)/phase2
           pytest tests || true
+
+      - name: Package phase2 artifact
+        run: |
+          # Package the phase2 app plus the deploy helper so EC2 can run deploy/deploy.sh
+          zip -r phase2-artifact-${{ github.sha }}.zip phase2 deploy -x "**/__pycache__/**" "**/.venv/**" || true
+
+      - name: Upload artifact to S3
+        env:
+          AWS_REGION: ${{ vars.AWS_REGION }}
+          S3_BUCKET: ${{ secrets.DEPLOY_S3_BUCKET }}
+        run: |
+          ARTIFACT=phase2-artifact-${{ github.sha }}.zip
+          aws s3 cp $ARTIFACT s3://$S3_BUCKET/$ARTIFACT --region $AWS_REGION
 
       - name: Lint
         run: |
@@ -65,5 +89,22 @@ jobs:
                "$ACTIONS_ID_TOKEN_REQUEST_URL"
 
       - name: Run deploy script
-        run: bash deploy/deploy.sh
+        env:
+          AWS_REGION: ${{ vars.AWS_REGION }}
+          S3_BUCKET: ${{ secrets.DEPLOY_S3_BUCKET }}
+          ARTIFACT: phase2-artifact-${{ github.sha }}.zip
+        run: |
+          # Trigger deployment on EC2 instances tagged with Role=phase2 via SSM
+          echo "Sending SSM command to deploy artifact s3://$S3_BUCKET/$ARTIFACT"
+          
+          # Build the shell command to run on EC2
+          DEPLOY_CMD="mkdir -p /tmp/deploy && cd /tmp/deploy && aws s3 cp s3://$S3_BUCKET/$ARTIFACT . --region $AWS_REGION && unzip -o $ARTIFACT -d /tmp/deploy && bash /tmp/deploy/deploy/deploy.sh"
+          
+          # Send command via SSM using proper JSON formatting
+          aws ssm send-command \
+            --document-name "AWS-RunShellScript" \
+            --targets "Key=tag:Role,Values=phase2" \
+            --parameters "{\"commands\":[\"$DEPLOY_CMD\"]}" \
+            --comment "Deploy from GitHub Actions: $GITHUB_SHA" \
+            --output text || true
 
