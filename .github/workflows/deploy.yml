@@ -90,9 +90,15 @@ jobs:
         run: |
           # Trigger deployment on EC2 instances tagged with Role=phase2 via SSM
           echo "Sending SSM command to deploy artifact s3://$S3_BUCKET/$ARTIFACT"
+          
+          # Build the shell command to run on EC2
+          DEPLOY_CMD="mkdir -p /tmp/deploy && cd /tmp/deploy && aws s3 cp s3://$S3_BUCKET/$ARTIFACT . --region $AWS_REGION && unzip -o $ARTIFACT -d /tmp/deploy && bash /tmp/deploy/deploy/deploy.sh"
+          
+          # Send command via SSM using proper JSON formatting
           aws ssm send-command \
             --document-name "AWS-RunShellScript" \
             --targets "Key=tag:Role,Values=phase2" \
-            --parameters commands=["/bin/bash -lc 'mkdir -p /tmp/deploy && cd /tmp/deploy && aws s3 cp s3://$S3_BUCKET/$ARTIFACT . --region $AWS_REGION && unzip -o $ARTIFACT -d /tmp/deploy && bash /tmp/deploy/deploy/deploy.sh'"] \
-            --comment "Deploy from GitHub Actions: $GITHUB_SHA" || true
+            --parameters "{\"commands\":[\"$DEPLOY_CMD\"]}" \
+            --comment "Deploy from GitHub Actions: $GITHUB_SHA" \
+            --output text || true
 
