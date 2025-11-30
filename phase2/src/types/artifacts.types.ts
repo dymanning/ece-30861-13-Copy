@@ -24,6 +24,70 @@ export interface Artifact {
 }
 
 // ============================================
+// Extended Spec Types (Rating, Cost, Lineage)
+// ============================================
+
+export interface SizeScore {
+  raspberry_pi: number;
+  jetson_nano: number;
+  desktop_pc: number;
+  aws_server: number;
+}
+
+export interface ModelRating {
+  name: string;
+  category: string;
+  net_score: number;
+  net_score_latency: number;
+  ramp_up_time: number;
+  ramp_up_time_latency: number;
+  bus_factor: number;
+  bus_factor_latency: number;
+  performance_claims: number;
+  performance_claims_latency: number;
+  license: number;
+  license_latency: number;
+  dataset_and_code_score: number;
+  dataset_and_code_score_latency: number;
+  dataset_quality: number;
+  dataset_quality_latency: number;
+  code_quality: number;
+  code_quality_latency: number;
+  reproducibility: number;
+  reproducibility_latency: number;
+  reviewedness: number;
+  reviewedness_latency: number;
+  tree_score: number;
+  tree_score_latency: number;
+  size_score: SizeScore;
+  size_score_latency: number;
+}
+
+export interface ArtifactCostEntry {
+  standalone_cost?: number;
+  total_cost: number;
+}
+export type ArtifactCost = Record<string, ArtifactCostEntry>;
+
+export interface ArtifactLineageNode {
+  artifact_id: string;
+  name: string;
+  source: string;
+  metadata?: Record<string, any>;
+}
+
+export interface ArtifactLineageEdge {
+  from_node_artifact_id: string;
+  to_node_artifact_id: string;
+  relationship: string;
+}
+
+export interface ArtifactLineageGraph {
+  nodes: ArtifactLineageNode[];
+  edges: ArtifactLineageEdge[];
+}
+
+// ============================================
 // Query Types
 // ============================================
 

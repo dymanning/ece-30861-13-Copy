@@ -99,4 +99,81 @@ router.get(
   })
 );
 
+// Spec: POST /artifact/{artifact_type}
+router.post(
+  '/artifact/:artifact_type',
+  authenticate,
+  asyncHandler(async (req, res) => {
+    await artifactsController.createArtifact(req, res);
+  })
+);
+
+// Spec: GET/PUT/DELETE /artifacts/{artifact_type}/{id}
+router.get(
+  '/artifacts/:artifact_type/:id',
+  authenticate,
+  asyncHandler(async (req, res) => {
+    await artifactsController.getArtifact(req, res);
+  })
+);
+router.put(
+  '/artifacts/:artifact_type/:id',
+  authenticate,
+  asyncHandler(async (req, res) => {
+    await artifactsController.updateArtifact(req, res);
+  })
+);
+router.delete(
+  '/artifacts/:artifact_type/:id',
+  authenticate,
+  asyncHandler(async (req, res) => {
+    await artifactsController.deleteArtifact(req, res);
+  })
+);
+
+// Spec: GET /artifact/model/{id}/rate
+router.get(
+  '/artifact/model/:id/rate',
+  authenticate,
+  asyncHandler(async (req, res) => {
+    await artifactsController.getModelRating(req, res);
+  })
+);
+
+// Spec: GET /artifact/:artifact_type/:id/cost
+router.get(
+  '/artifact/:artifact_type/:id/cost',
+  authenticate,
+  asyncHandler(async (req, res) => {
+    await artifactsController.getArtifactCost(req, res);
+  })
+);
+
+// Spec: GET /artifact/model/:id/lineage
+router.get(
+  '/artifact/model/:id/lineage',
+  authenticate,
+  asyncHandler(async (req, res) => {
+    await artifactsController.getLineage(req, res);
+  })
+);
+
+// Spec: POST /artifact/model/:id/license-check
+router.post(
+  '/artifact/model/:id/license-check',
+  authenticate,
+  asyncHandler(async (req, res) => {
+    await artifactsController.licenseCheck(req, res);
+  })
+);
+
+// Spec: GET /tracks (planning placeholder)
+router.get(
+  '/tracks',
+  authenticate,
+  asyncHandler(async (_req, res) => {
+    res.status(200).json({ plannedTracks: [] });
+  })
+);
+
 export default router;

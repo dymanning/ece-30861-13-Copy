@@ -2,6 +2,7 @@ import express, { Application, Request, Response } from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import artifactsRoutes from './routes/artifacts.routes';
+import authRoutes from './routes/auth.routes';
 import {
   errorHandler,
   notFoundHandler,
@@ -86,6 +87,8 @@ export function createApp(): Application {
 
   // Mount artifact routes
   app.use('/', artifactsRoutes);
+  // Mount auth routes
+  app.use('/', authRoutes);
 
   // ============================================
   // Error Handling

@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 import { artifactsService } from '../services/artifacts.service';
-import { ArtifactQuery } from '../types/artifacts.types';
+import { ArtifactQuery, Artifact } from '../types/artifacts.types';
 import {
   getPaginationParams,
   processPaginatedResults,
@@ -232,6 +232,108 @@ export class ArtifactsController {
         error: error instanceof Error ? error.message : 'Unknown error',
         timestamp: new Date().toISOString(),
       });
+    }
+  }
+
+  /**
+   * POST /artifact/{artifact_type}
+   */
+  async createArtifact(req: Request, res: Response): Promise<void> {
+    try {
+      const { artifact_type } = req.params;
+      const artifact = await artifactsService.createArtifact(artifact_type, req.body);
+      res.status(201).json(artifact);
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  /**
+   * GET /artifacts/{artifact_type}/{id}
+   */
+  async getArtifact(req: Request, res: Response): Promise<void> {
+    try {
+      const { artifact_type, id } = req.params;
+      const artifact = await artifactsService.getArtifact(artifact_type, id);
+      res.status(200).json(artifact);
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  /**
+   * PUT /artifacts/{artifact_type}/{id}
+   */
+  async updateArtifact(req: Request, res: Response): Promise<void> {
+    try {
+      const { artifact_type, id } = req.params;
+      const body: Artifact = req.body;
+      await artifactsService.updateArtifact(artifact_type, id, body);
+      res.status(200).json({ message: 'Artifact updated' });
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  /**
+   * DELETE /artifacts/{artifact_type}/{id}
+   */
+  async deleteArtifact(req: Request, res: Response): Promise<void> {
+    try {
+      const { artifact_type, id } = req.params;
+      await artifactsService.deleteArtifact(artifact_type, id);
+      res.status(200).json({ message: 'Artifact deleted' });
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  /** GET /artifact/model/{id}/rate */
+  async getModelRating(req: Request, res: Response): Promise<void> {
+    try {
+      const { id } = req.params;
+      const rating = await artifactsService.getModelRating(id);
+      res.status(200).json(rating);
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  /** GET /artifact/{artifact_type}/{id}/cost */
+  async getArtifactCost(req: Request, res: Response): Promise<void> {
+    try {
+      const { artifact_type, id } = req.params;
+      const includeDependencies = req.query.dependency === 'true';
+      const cost = await artifactsService.getArtifactCost(artifact_type, id, includeDependencies);
+      res.status(200).json(cost);
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  /** GET /artifact/model/{id}/lineage */
+  async getLineage(req: Request, res: Response): Promise<void> {
+    try {
+      const { id } = req.params;
+      const lineage = await artifactsService.getLineage(id);
+      res.status(200).json(lineage);
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  /** POST /artifact/model/{id}/license-check */
+  async licenseCheck(req: Request, res: Response): Promise<void> {
+    try {
+      const { id } = req.params;
+      const { github_url } = req.body;
+      if (!github_url) {
+        throw new BadRequestError('github_url required');
+      }
+      const result = await artifactsService.licenseCheck(id, github_url);
+      res.status(200).json(result);
+    } catch (error) {
+      throw error;
     }
   }
 }

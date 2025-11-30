@@ -56,6 +56,18 @@ export class InternalServerError extends AppError {
   }
 }
 
+export class ConflictError extends AppError {
+  constructor(message: string = 'Conflict') {
+    super(message, 409);
+  }
+}
+
+export class FailedDependencyError extends AppError {
+  constructor(message: string = 'Failed Dependency') {
+    super(message, 424);
+  }
+}
+
 /**
  * Error response formatter
  */
@@ -157,7 +169,7 @@ export function handleDatabaseError(error: any): never {
   // Check for specific PostgreSQL error codes
   if (error.code === '23505') {
     // Unique violation
-    throw new BadRequestError('Resource already exists');
+    throw new ConflictError('Resource already exists');
   } else if (error.code === '23503') {
     // Foreign key violation
     throw new BadRequestError('Referenced resource does not exist');

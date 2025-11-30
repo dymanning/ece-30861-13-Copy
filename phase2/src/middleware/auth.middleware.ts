@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { config } from '../config/config';
 import { logger } from '../utils/logger';
+import { verifyAndConsume } from '../utils/auth.utils';
 
 /**
  * Extended Request interface with user information
@@ -30,57 +31,41 @@ export function authenticate(
 ): void {
   const authHeader = req.get('X-Authorization');
 
-  // If authentication is not enabled, allow all requests
+  // If authentication is not enabled, return 501 per spec
   if (!config.auth.enabled) {
-    logger.debug('Authentication disabled, allowing request');
-    next();
+    logger.debug('Authentication disabled');
+    res.status(501).json({ error: 'Authentication not implemented' });
     return;
   }
 
-  // Check if auth header is present
   if (!authHeader) {
     logger.warn('Authentication failed: Missing X-Authorization header');
-    res.status(403).json({
-      error: 'Authentication failed',
-      message: 'Missing X-Authorization header',
-    });
+    res.status(403).json({ error: 'Authentication failed', message: 'Missing X-Authorization header' });
     return;
   }
 
-  // Stub: For Deliverable #1, accept any token format
-  // TODO: Implement JWT validation for future deliverables
-  
   try {
-    // Extract token (handle both "Bearer token" and "token" formats)
-    const token = authHeader.startsWith('bearer ')
-      ? authHeader.substring(7)
-      : authHeader;
-
+    const token = authHeader.startsWith('bearer ') ? authHeader.substring(7) : authHeader;
     if (!token) {
       throw new Error('Empty token');
     }
 
-    // TODO: Validate JWT token here
-    // For now, accept any non-empty token and set default user
+    // Validate and consume one usage
+    const info = verifyAndConsume(token);
+
+    // Attach user info to request
     req.user = {
-      username: 'ece30861defaultadminuser',
-      isAdmin: true,
+      username: info.payload.id,
+      isAdmin: info.payload.role === 'admin',
     };
 
-    logger.debug('Authentication successful (stub)', {
-      username: req.user.username,
-    });
+    // Optionally expose remaining usage in header
+    res.setHeader('X-Token-Remaining', String(info.remaining));
 
     next();
-  } catch (error) {
-    logger.warn('Authentication failed:', {
-      error: error instanceof Error ? error.message : 'Unknown error',
-    });
-
-    res.status(403).json({
-      error: 'Authentication failed',
-      message: 'Invalid or malformed X-Authorization token',
-    });
+  } catch (error: any) {
+    logger.warn('Authentication failed:', { error: error?.message || error });
+    res.status(403).json({ error: 'Authentication failed', message: error?.message || 'Invalid token' });
   }
 }
 import { verifyToken } from '../utils/auth.utils';
