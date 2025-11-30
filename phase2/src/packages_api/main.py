@@ -20,6 +20,11 @@ from . import models
 from .schemas import PackageCreate, PackageUpdate, PackageOut
 from .crud import create_package, get_package, update_package, delete_package
 from .s3_client import S3Client
+from .monitoring import (
+    run_security_check,
+    save_monitoring_result,
+    check_artifact_sensitivity
+)
 
 models.Base.metadata.create_all(bind=engine)
 
@@ -67,7 +72,11 @@ async def upload_package(
 
 @app.get("/packages/{pkg_id}")
 def download_package(
-    pkg_id: int, component: Optional[str] = None, db: Session = Depends(get_db)
+    pkg_id: int, 
+    component: Optional[str] = None, 
+    db: Session = Depends(get_db),
+    user_id: Optional[str] = None,  # TODO: Extract from auth token
+    user_is_admin: bool = False      # TODO: Extract from auth token
 ):
     pkg = get_package(db, pkg_id)
     if not pkg:
@@ -75,6 +84,47 @@ def download_package(
 
     if not pkg.s3_uri:
         raise HTTPException(status_code=404, detail="Package file not available")
+    
+    # 🔒 SECURITY MONITORING: Check if artifact requires validation
+    is_sensitive, script_name = check_artifact_sensitivity(db, str(pkg_id))
+    
+    if is_sensitive:
+        # Execute security check
+        monitoring_result = run_security_check(
+            artifact_id=str(pkg_id),
+            artifact_name=pkg.name,
+            artifact_type=None,  # TODO: Add type to package model
+            script_name=script_name or "default-check.js"
+        )
+        
+        # Save monitoring result to history
+        try:
+            save_monitoring_result(
+                db=db,
+                artifact_id=str(pkg_id),
+                result=monitoring_result,
+                script_name=script_name or "default-check.js",
+                user_id=user_id,
+                user_is_admin=user_is_admin,
+                metadata={
+                    "package_name": pkg.name,
+                    "component": component
+                }
+            )
+        except Exception as e:
+            # Log error but don't block download on history save failure
+            print(f"Warning: Failed to save monitoring history: {e}")
+        
+        # Block download if monitoring check failed
+        if not monitoring_result.is_allowed():
+            raise HTTPException(
+                status_code=403,
+                detail={
+                    "error": "DownloadBlocked",
+                    "message": "Artifact failed security monitoring check",
+                    "monitoring": monitoring_result.to_dict()
+                }
+            )
 
     s3_key = S3Client.key_from_uri(pkg.s3_uri)
 

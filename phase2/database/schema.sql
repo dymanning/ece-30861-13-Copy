@@ -3,6 +3,8 @@
 -- ============================================
 
 -- Drop existing tables if they exist (for fresh setup)
+DROP TABLE IF EXISTS monitoring_history CASCADE;
+DROP TABLE IF EXISTS monitoring_config CASCADE;
 DROP TABLE IF EXISTS artifacts CASCADE;
 DROP TABLE IF EXISTS users CASCADE;
 
@@ -25,6 +27,11 @@ CREATE TABLE artifacts (
     
     -- Flexible storage for ratings, lineage, etc.
     metadata JSONB DEFAULT '{}',
+    
+    -- Security monitoring fields
+    is_sensitive BOOLEAN DEFAULT FALSE,
+    monitoring_script VARCHAR(255) DEFAULT 'default-check.js',
+    require_approval BOOLEAN DEFAULT FALSE,
     
     -- Timestamps
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
@@ -108,6 +115,70 @@ BEGIN
     RETURN total;
 END;
 $$ LANGUAGE plpgsql;
+
+-- ============================================
+-- Monitoring History Table
+-- ============================================
+CREATE TABLE monitoring_history (
+    id SERIAL PRIMARY KEY,
+    artifact_id VARCHAR(50) NOT NULL,
+    
+    -- Execution details
+    executed_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    script_name VARCHAR(255) NOT NULL,
+    execution_duration_ms INTEGER NOT NULL,
+    
+    -- User context
+    user_id VARCHAR(255),
+    user_is_admin BOOLEAN DEFAULT FALSE,
+    
+    -- Results
+    exit_code INTEGER NOT NULL,
+    stdout TEXT,
+    stderr TEXT,
+    
+    -- Decision outcome
+    action_taken VARCHAR(20) NOT NULL CHECK (
+        action_taken IN ('allowed', 'blocked', 'warned', 'error')
+    ),
+    
+    -- Additional metadata
+    metadata JSONB DEFAULT '{}',
+    
+    CONSTRAINT valid_exit_code CHECK (exit_code >= 0 AND exit_code <= 255),
+    CONSTRAINT fk_artifact FOREIGN KEY (artifact_id) 
+        REFERENCES artifacts(id) ON DELETE CASCADE
+);
+
+-- Indexes for monitoring history
+CREATE INDEX idx_monitoring_artifact ON monitoring_history(artifact_id);
+CREATE INDEX idx_monitoring_executed_at ON monitoring_history(executed_at DESC);
+CREATE INDEX idx_monitoring_action ON monitoring_history(action_taken);
+CREATE INDEX idx_monitoring_user ON monitoring_history(user_id);
+CREATE INDEX idx_monitoring_exit_code ON monitoring_history(exit_code);
+
+-- Index for sensitive artifacts
+CREATE INDEX idx_artifacts_sensitive ON artifacts(is_sensitive) 
+WHERE is_sensitive = TRUE;
+
+-- ============================================
+-- Monitoring Configuration Table
+-- ============================================
+CREATE TABLE monitoring_config (
+    key VARCHAR(100) PRIMARY KEY,
+    value TEXT NOT NULL,
+    description TEXT,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Insert default monitoring configuration
+INSERT INTO monitoring_config (key, value, description) VALUES
+('default_script', 'default-check.js', 'Default monitoring script'),
+('script_timeout_ms', '5000', 'Maximum script execution time in milliseconds'),
+('block_on_nonzero', 'true', 'Block download if exit code is non-zero'),
+('log_stdout', 'true', 'Log stdout from scripts'),
+('log_stderr', 'true', 'Log stderr from scripts'),
+('max_output_length', '10000', 'Maximum length of stdout/stderr to store');
 
 -- ============================================
 -- Sample Data (Optional - for testing)
