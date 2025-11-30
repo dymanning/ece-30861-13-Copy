@@ -219,3 +219,66 @@ else
 fi
 
 log_info "Deployment complete!"
+
+# --- CloudWatch Agent Setup for Ubuntu EC2 Logging ---
+echo "\n[CloudWatch] Installing and configuring CloudWatch Agent for logging..."
+
+# Install CloudWatch Agent if not present
+if ! dpkg -l | grep -q amazon-cloudwatch-agent; then
+  echo "[CloudWatch] Installing amazon-cloudwatch-agent..."
+  sudo apt-get update && sudo apt-get install -y amazon-cloudwatch-agent
+else
+  echo "[CloudWatch] CloudWatch Agent already installed."
+fi
+
+# Ensure log files and directories exist
+sudo mkdir -p /var/log/nginx
+sudo mkdir -p /var/www/myapp
+sudo touch /var/log/nginx/error.log /var/log/nginx/access.log /var/www/myapp/app.log
+sudo chmod 666 /var/log/nginx/error.log /var/log/nginx/access.log /var/www/myapp/app.log
+
+# Create CloudWatch Agent config if not present
+CW_CONFIG="/opt/aws/amazon-cloudwatch-agent/bin/config.json"
+if [ ! -f "$CW_CONFIG" ]; then
+  echo "[CloudWatch] Creating default config at $CW_CONFIG"
+  sudo tee "$CW_CONFIG" > /dev/null <<'CWCONFIG'
+{
+  "logs": {
+    "logs_collected": {
+      "files": {
+        "collect_list": [
+          {
+            "file_path": "/var/log/syslog",
+            "log_group_name": "ec2-syslog",
+            "log_stream_name": "{instance_id}"
+          },
+          {
+            "file_path": "/var/log/nginx/error.log",
+            "log_group_name": "nginx-error",
+            "log_stream_name": "{instance_id}"
+          },
+          {
+            "file_path": "/var/log/nginx/access.log",
+            "log_group_name": "nginx-access",
+            "log_stream_name": "{instance_id}"
+          },
+          {
+            "file_path": "/var/www/myapp/app.log",
+            "log_group_name": "app-log",
+            "log_stream_name": "{instance_id}"
+          }
+        ]
+      }
+    }
+  }
+}
+CWCONFIG
+else
+  echo "[CloudWatch] Config already exists at $CW_CONFIG"
+fi
+
+# Start and enable CloudWatch Agent service
+echo "[CloudWatch] Starting and enabling CloudWatch Agent service..."
+sudo systemctl enable amazon-cloudwatch-agent
+sudo systemctl restart amazon-cloudwatch-agent
+echo "[CloudWatch] CloudWatch Agent setup complete."
