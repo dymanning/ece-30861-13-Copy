@@ -1,0 +1,25 @@
+{
+  "logs": {
+    "logs_collected": {
+      "files": {
+        "collect_list": [
+          {
+            "file_path": "/var/log/messages",
+            "log_group_name": "phase2-system",
+            "log_stream_name": "{instance_id}"
+          },
+          {
+            "file_path": "/var/log/cloud-init.log",
+            "log_group_name": "phase2-cloud-init",
+            "log_stream_name": "{instance_id}"
+          },
+          {
+            "file_path": "/tmp/deploy/deploy.log",
+            "log_group_name": "phase2-deploy",
+            "log_stream_name": "{instance_id}"
+          }
+        ]
+      }
+    }
+  }
+}
