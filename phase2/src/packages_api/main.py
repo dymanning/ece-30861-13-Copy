@@ -21,10 +21,19 @@ from .schemas import PackageCreate, PackageUpdate, PackageOut
 from .crud import create_package, get_package, update_package, delete_package
 from .s3_client import S3Client
 
+# Import log viewer router
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).parent.parent))
+from logs_api import router as logs_router
+
 models.Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="Packages API")
 s3 = S3Client()
+
+# Include log viewer endpoints
+app.include_router(logs_router)
 
 
 @app.post("/packages", response_model=PackageOut, status_code=status.HTTP_201_CREATED)

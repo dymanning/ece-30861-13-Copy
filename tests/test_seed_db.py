@@ -26,7 +26,7 @@ def test_seed_roles_and_default_admin(tmp_path):
     assert "admin" in roles, "admin role missing"
     assert roles["admin"][-1] == 1, "admin role not marked as admin"
 
-    c.execute("SELECT username, role, password_hash FROM users WHERE username = ?", (seed_db.DEFAULT_ADMIN["username"],))
+    c.execute("SELECT username, role, passwordHash FROM users WHERE username = ?", (seed_db.DEFAULT_ADMIN["username"],))
     user = c.fetchone()
     assert user is not None, "default admin user missing"
     assert user[1] == "admin", "default admin has wrong role"
@@ -82,14 +82,14 @@ def test_password_hashing_and_verification(tmp_path):
 
     conn = sqlite3.connect(seed_db.DB_PATH)
     c = conn.cursor()
-    c.execute("SELECT password_hash FROM users WHERE username = ?", (seed_db.DEFAULT_ADMIN["username"],))
+    c.execute("SELECT passwordHash FROM users WHERE username = ?", (seed_db.DEFAULT_ADMIN["username"],))
     row = c.fetchone()
     assert row is not None
     pw_hash = row[0]
 
-    # Not stored in plaintext and uses the expected "salt:hash" format
+    # Not stored in plaintext (bcrypt format starts with $2b$)
     assert pw_hash != seed_db.DEFAULT_ADMIN["password"]
-    assert ":" in pw_hash
+    assert pw_hash.startswith("$2b$") or pw_hash.startswith("$2a$"), "Password hash should be bcrypt format"
 
     # verify_password should accept correct and reject incorrect passwords (if implemented)
     if hasattr(seed_db, "verify_password"):
