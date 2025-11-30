@@ -1,0 +1,14 @@
+{
+  "name": "security-scripts",
+  "version": "1.0.0",
+  "description": "Security validation scripts for artifact downloads",
+  "scripts": {
+    "test": "node default-check.js --artifact-id test123 --name test-model --type model"
+  },
+  "keywords": ["security", "validation"],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "minimist": "^1.2.8"
+  }
+}
