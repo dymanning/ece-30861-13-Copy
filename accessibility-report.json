@@ -1,0 +1,678 @@
+{
+  "base": "http://127.0.0.1:3000",
+  "pages": [
+    "/",
+    "/login",
+    "/register",
+    "/dashboard",
+    "/admin"
+  ],
+  "reports": [
+    {
+      "url": "http://127.0.0.1:3000/",
+      "score": 96,
+      "total_penalty": 4,
+      "violations_count": 2,
+      "critical_violations": 0,
+      "violations": [
+        {
+          "description": "Ensures the page has only one main landmark and each iframe in the page has at most one main landmark",
+          "help": "Page must have one main landmark",
+          "helpUrl": "https://dequeuniversity.com/rules/axe/3.1/landmark-one-main?application=axeAPI",
+          "id": "landmark-one-main",
+          "impact": "moderate",
+          "nodes": [
+            {
+              "all": [
+                {
+                  "data": null,
+                  "id": "page-has-main",
+                  "impact": "moderate",
+                  "message": "Page does not have a main landmark",
+                  "relatedNodes": []
+                }
+              ],
+              "any": [],
+              "failureSummary": "Fix all of the following:\n  Page does not have a main landmark",
+              "html": "<html lang=\"en\">",
+              "impact": "moderate",
+              "none": [],
+              "target": [
+                "html"
+              ]
+            }
+          ],
+          "tags": [
+            "cat.semantics",
+            "best-practice"
+          ]
+        },
+        {
+          "description": "Ensures all page content is contained by landmarks",
+          "help": "All page content must be contained by landmarks",
+          "helpUrl": "https://dequeuniversity.com/rules/axe/3.1/region?application=axeAPI",
+          "id": "region",
+          "impact": "moderate",
+          "nodes": [
+            {
+              "all": [],
+              "any": [
+                {
+                  "data": null,
+                  "id": "region",
+                  "impact": "moderate",
+                  "message": "Some page content is not contained by landmarks",
+                  "relatedNodes": [
+                    {
+                      "html": "<h1>Welcome</h1>",
+                      "target": [
+                        "h1"
+                      ]
+                    },
+                    {
+                      "html": "<p>This is a minimal Flask front-end that talks to an external JWT API.</p>",
+                      "target": [
+                        "p"
+                      ]
+                    }
+                  ]
+                }
+              ],
+              "failureSummary": "Fix any of the following:\n  Some page content is not contained by landmarks",
+              "html": "<html lang=\"en\">",
+              "impact": "moderate",
+              "none": [],
+              "target": [
+                "html"
+              ]
+            }
+          ],
+          "tags": [
+            "cat.keyboard",
+            "best-practice"
+          ]
+        }
+      ]
+    },
+    {
+      "url": "http://127.0.0.1:3000/login",
+      "score": 94,
+      "total_penalty": 6,
+      "violations_count": 3,
+      "critical_violations": 0,
+      "violations": [
+        {
+          "description": "Ensures the page has only one main landmark and each iframe in the page has at most one main landmark",
+          "help": "Page must have one main landmark",
+          "helpUrl": "https://dequeuniversity.com/rules/axe/3.1/landmark-one-main?application=axeAPI",
+          "id": "landmark-one-main",
+          "impact": "moderate",
+          "nodes": [
+            {
+              "all": [
+                {
+                  "data": null,
+                  "id": "page-has-main",
+                  "impact": "moderate",
+                  "message": "Page does not have a main landmark",
+                  "relatedNodes": []
+                }
+              ],
+              "any": [],
+              "failureSummary": "Fix all of the following:\n  Page does not have a main landmark",
+              "html": "<html lang=\"en\">",
+              "impact": "moderate",
+              "none": [],
+              "target": [
+                "html"
+              ]
+            }
+          ],
+          "tags": [
+            "cat.semantics",
+            "best-practice"
+          ]
+        },
+        {
+          "description": "Ensure that the page, or at least one of its frames contains a level-one heading",
+          "help": "Page must contain a level-one heading",
+          "helpUrl": "https://dequeuniversity.com/rules/axe/3.1/page-has-heading-one?application=axeAPI",
+          "id": "page-has-heading-one",
+          "impact": "moderate",
+          "nodes": [
+            {
+              "all": [
+                {
+                  "data": null,
+                  "id": "page-has-heading-one",
+                  "impact": "moderate",
+                  "message": "Page must have a level-one heading",
+                  "relatedNodes": []
+                }
+              ],
+              "any": [],
+              "failureSummary": "Fix all of the following:\n  Page must have a level-one heading",
+              "html": "<html lang=\"en\">",
+              "impact": "moderate",
+              "none": [],
+              "target": [
+                "html"
+              ]
+            }
+          ],
+          "tags": [
+            "cat.semantics",
+            "best-practice"
+          ]
+        },
+        {
+          "description": "Ensures all page content is contained by landmarks",
+          "help": "All page content must be contained by landmarks",
+          "helpUrl": "https://dequeuniversity.com/rules/axe/3.1/region?application=axeAPI",
+          "id": "region",
+          "impact": "moderate",
+          "nodes": [
+            {
+              "all": [],
+              "any": [
+                {
+                  "data": null,
+                  "id": "region",
+                  "impact": "moderate",
+                  "message": "Some page content is not contained by landmarks",
+                  "relatedNodes": [
+                    {
+                      "html": "<h2 class=\"mb-3\">Login</h2>",
+                      "target": [
+                        "h2"
+                      ]
+                    },
+                    {
+                      "html": "<label for=\"email\" class=\"form-label\">Email</label>",
+                      "target": [
+                        "label[for=\"email\"]"
+                      ]
+                    },
+                    {
+                      "html": "<input type=\"email\" class=\"form-control\" id=\"email\" name=\"email\" required=\"\">",
+                      "target": [
+                        "#email"
+                      ]
+                    },
+                    {
+                      "html": "<label for=\"password\" class=\"form-label\">Password</label>",
+                      "target": [
+                        "label[for=\"password\"]"
+                      ]
+                    },
+                    {
+                      "html": "<input type=\"password\" class=\"form-control\" id=\"password\" name=\"password\" required=\"\">",
+                      "target": [
+                        "#password"
+                      ]
+                    },
+                    {
+                      "html": "<button class=\"btn btn-primary w-100\" type=\"submit\">Sign in</button>",
+                      "target": [
+                        ".btn"
+                      ]
+                    }
+                  ]
+                }
+              ],
+              "failureSummary": "Fix any of the following:\n  Some page content is not contained by landmarks",
+              "html": "<html lang=\"en\">",
+              "impact": "moderate",
+              "none": [],
+              "target": [
+                "html"
+              ]
+            }
+          ],
+          "tags": [
+            "cat.keyboard",
+            "best-practice"
+          ]
+        }
+      ]
+    },
+    {
+      "url": "http://127.0.0.1:3000/register",
+      "score": 94,
+      "total_penalty": 6,
+      "violations_count": 3,
+      "critical_violations": 0,
+      "violations": [
+        {
+          "description": "Ensures the page has only one main landmark and each iframe in the page has at most one main landmark",
+          "help": "Page must have one main landmark",
+          "helpUrl": "https://dequeuniversity.com/rules/axe/3.1/landmark-one-main?application=axeAPI",
+          "id": "landmark-one-main",
+          "impact": "moderate",
+          "nodes": [
+            {
+              "all": [
+                {
+                  "data": null,
+                  "id": "page-has-main",
+                  "impact": "moderate",
+                  "message": "Page does not have a main landmark",
+                  "relatedNodes": []
+                }
+              ],
+              "any": [],
+              "failureSummary": "Fix all of the following:\n  Page does not have a main landmark",
+              "html": "<html lang=\"en\">",
+              "impact": "moderate",
+              "none": [],
+              "target": [
+                "html"
+              ]
+            }
+          ],
+          "tags": [
+            "cat.semantics",
+            "best-practice"
+          ]
+        },
+        {
+          "description": "Ensure that the page, or at least one of its frames contains a level-one heading",
+          "help": "Page must contain a level-one heading",
+          "helpUrl": "https://dequeuniversity.com/rules/axe/3.1/page-has-heading-one?application=axeAPI",
+          "id": "page-has-heading-one",
+          "impact": "moderate",
+          "nodes": [
+            {
+              "all": [
+                {
+                  "data": null,
+                  "id": "page-has-heading-one",
+                  "impact": "moderate",
+                  "message": "Page must have a level-one heading",
+                  "relatedNodes": []
+                }
+              ],
+              "any": [],
+              "failureSummary": "Fix all of the following:\n  Page must have a level-one heading",
+              "html": "<html lang=\"en\">",
+              "impact": "moderate",
+              "none": [],
+              "target": [
+                "html"
+              ]
+            }
+          ],
+          "tags": [
+            "cat.semantics",
+            "best-practice"
+          ]
+        },
+        {
+          "description": "Ensures all page content is contained by landmarks",
+          "help": "All page content must be contained by landmarks",
+          "helpUrl": "https://dequeuniversity.com/rules/axe/3.1/region?application=axeAPI",
+          "id": "region",
+          "impact": "moderate",
+          "nodes": [
+            {
+              "all": [],
+              "any": [
+                {
+                  "data": null,
+                  "id": "region",
+                  "impact": "moderate",
+                  "message": "Some page content is not contained by landmarks",
+                  "relatedNodes": [
+                    {
+                      "html": "<h2 class=\"mb-3\">Register</h2>",
+                      "target": [
+                        "h2"
+                      ]
+                    },
+                    {
+                      "html": "<label for=\"email\" class=\"form-label\">Email</label>",
+                      "target": [
+                        "label[for=\"email\"]"
+                      ]
+                    },
+                    {
+                      "html": "<input type=\"email\" class=\"form-control\" id=\"email\" name=\"email\" required=\"\">",
+                      "target": [
+                        "#email"
+                      ]
+                    },
+                    {
+                      "html": "<label for=\"password\" class=\"form-label\">Password</label>",
+                      "target": [
+                        "label[for=\"password\"]"
+                      ]
+                    },
+                    {
+                      "html": "<input type=\"password\" class=\"form-control\" id=\"password\" name=\"password\" required=\"\">",
+                      "target": [
+                        "#password"
+                      ]
+                    },
+                    {
+                      "html": "<button class=\"btn btn-primary w-100\" type=\"submit\">Create account</button>",
+                      "target": [
+                        ".btn"
+                      ]
+                    }
+                  ]
+                }
+              ],
+              "failureSummary": "Fix any of the following:\n  Some page content is not contained by landmarks",
+              "html": "<html lang=\"en\">",
+              "impact": "moderate",
+              "none": [],
+              "target": [
+                "html"
+              ]
+            }
+          ],
+          "tags": [
+            "cat.keyboard",
+            "best-practice"
+          ]
+        }
+      ]
+    },
+    {
+      "url": "http://127.0.0.1:3000/dashboard",
+      "score": 94,
+      "total_penalty": 6,
+      "violations_count": 3,
+      "critical_violations": 0,
+      "violations": [
+        {
+          "description": "Ensures the page has only one main landmark and each iframe in the page has at most one main landmark",
+          "help": "Page must have one main landmark",
+          "helpUrl": "https://dequeuniversity.com/rules/axe/3.1/landmark-one-main?application=axeAPI",
+          "id": "landmark-one-main",
+          "impact": "moderate",
+          "nodes": [
+            {
+              "all": [
+                {
+                  "data": null,
+                  "id": "page-has-main",
+                  "impact": "moderate",
+                  "message": "Page does not have a main landmark",
+                  "relatedNodes": []
+                }
+              ],
+              "any": [],
+              "failureSummary": "Fix all of the following:\n  Page does not have a main landmark",
+              "html": "<html lang=\"en\">",
+              "impact": "moderate",
+              "none": [],
+              "target": [
+                "html"
+              ]
+            }
+          ],
+          "tags": [
+            "cat.semantics",
+            "best-practice"
+          ]
+        },
+        {
+          "description": "Ensure that the page, or at least one of its frames contains a level-one heading",
+          "help": "Page must contain a level-one heading",
+          "helpUrl": "https://dequeuniversity.com/rules/axe/3.1/page-has-heading-one?application=axeAPI",
+          "id": "page-has-heading-one",
+          "impact": "moderate",
+          "nodes": [
+            {
+              "all": [
+                {
+                  "data": null,
+                  "id": "page-has-heading-one",
+                  "impact": "moderate",
+                  "message": "Page must have a level-one heading",
+                  "relatedNodes": []
+                }
+              ],
+              "any": [],
+              "failureSummary": "Fix all of the following:\n  Page must have a level-one heading",
+              "html": "<html lang=\"en\">",
+              "impact": "moderate",
+              "none": [],
+              "target": [
+                "html"
+              ]
+            }
+          ],
+          "tags": [
+            "cat.semantics",
+            "best-practice"
+          ]
+        },
+        {
+          "description": "Ensures all page content is contained by landmarks",
+          "help": "All page content must be contained by landmarks",
+          "helpUrl": "https://dequeuniversity.com/rules/axe/3.1/region?application=axeAPI",
+          "id": "region",
+          "impact": "moderate",
+          "nodes": [
+            {
+              "all": [],
+              "any": [
+                {
+                  "data": null,
+                  "id": "region",
+                  "impact": "moderate",
+                  "message": "Some page content is not contained by landmarks",
+                  "relatedNodes": [
+                    {
+                      "html": "<div class=\"alert alert-warning\" role=\"alert\">Please sign in to access that page.</div>",
+                      "target": [
+                        ".alert"
+                      ]
+                    },
+                    {
+                      "html": "<h2 class=\"mb-3\">Login</h2>",
+                      "target": [
+                        "h2"
+                      ]
+                    },
+                    {
+                      "html": "<label for=\"email\" class=\"form-label\">Email</label>",
+                      "target": [
+                        "label[for=\"email\"]"
+                      ]
+                    },
+                    {
+                      "html": "<input type=\"email\" class=\"form-control\" id=\"email\" name=\"email\" required=\"\">",
+                      "target": [
+                        "#email"
+                      ]
+                    },
+                    {
+                      "html": "<label for=\"password\" class=\"form-label\">Password</label>",
+                      "target": [
+                        "label[for=\"password\"]"
+                      ]
+                    },
+                    {
+                      "html": "<input type=\"password\" class=\"form-control\" id=\"password\" name=\"password\" required=\"\">",
+                      "target": [
+                        "#password"
+                      ]
+                    },
+                    {
+                      "html": "<button class=\"btn btn-primary w-100\" type=\"submit\">Sign in</button>",
+                      "target": [
+                        ".btn"
+                      ]
+                    }
+                  ]
+                }
+              ],
+              "failureSummary": "Fix any of the following:\n  Some page content is not contained by landmarks",
+              "html": "<html lang=\"en\">",
+              "impact": "moderate",
+              "none": [],
+              "target": [
+                "html"
+              ]
+            }
+          ],
+          "tags": [
+            "cat.keyboard",
+            "best-practice"
+          ]
+        }
+      ]
+    },
+    {
+      "url": "http://127.0.0.1:3000/admin",
+      "score": 94,
+      "total_penalty": 6,
+      "violations_count": 3,
+      "critical_violations": 0,
+      "violations": [
+        {
+          "description": "Ensures the page has only one main landmark and each iframe in the page has at most one main landmark",
+          "help": "Page must have one main landmark",
+          "helpUrl": "https://dequeuniversity.com/rules/axe/3.1/landmark-one-main?application=axeAPI",
+          "id": "landmark-one-main",
+          "impact": "moderate",
+          "nodes": [
+            {
+              "all": [
+                {
+                  "data": null,
+                  "id": "page-has-main",
+                  "impact": "moderate",
+                  "message": "Page does not have a main landmark",
+                  "relatedNodes": []
+                }
+              ],
+              "any": [],
+              "failureSummary": "Fix all of the following:\n  Page does not have a main landmark",
+              "html": "<html lang=\"en\">",
+              "impact": "moderate",
+              "none": [],
+              "target": [
+                "html"
+              ]
+            }
+          ],
+          "tags": [
+            "cat.semantics",
+            "best-practice"
+          ]
+        },
+        {
+          "description": "Ensure that the page, or at least one of its frames contains a level-one heading",
+          "help": "Page must contain a level-one heading",
+          "helpUrl": "https://dequeuniversity.com/rules/axe/3.1/page-has-heading-one?application=axeAPI",
+          "id": "page-has-heading-one",
+          "impact": "moderate",
+          "nodes": [
+            {
+              "all": [
+                {
+                  "data": null,
+                  "id": "page-has-heading-one",
+                  "impact": "moderate",
+                  "message": "Page must have a level-one heading",
+                  "relatedNodes": []
+                }
+              ],
+              "any": [],
+              "failureSummary": "Fix all of the following:\n  Page must have a level-one heading",
+              "html": "<html lang=\"en\">",
+              "impact": "moderate",
+              "none": [],
+              "target": [
+                "html"
+              ]
+            }
+          ],
+          "tags": [
+            "cat.semantics",
+            "best-practice"
+          ]
+        },
+        {
+          "description": "Ensures all page content is contained by landmarks",
+          "help": "All page content must be contained by landmarks",
+          "helpUrl": "https://dequeuniversity.com/rules/axe/3.1/region?application=axeAPI",
+          "id": "region",
+          "impact": "moderate",
+          "nodes": [
+            {
+              "all": [],
+              "any": [
+                {
+                  "data": null,
+                  "id": "region",
+                  "impact": "moderate",
+                  "message": "Some page content is not contained by landmarks",
+                  "relatedNodes": [
+                    {
+                      "html": "<div class=\"alert alert-warning\" role=\"alert\">Please sign in to access that page.</div>",
+                      "target": [
+                        ".alert"
+                      ]
+                    },
+                    {
+                      "html": "<h2 class=\"mb-3\">Login</h2>",
+                      "target": [
+                        "h2"
+                      ]
+                    },
+                    {
+                      "html": "<label for=\"email\" class=\"form-label\">Email</label>",
+                      "target": [
+                        "label[for=\"email\"]"
+                      ]
+                    },
+                    {
+                      "html": "<input type=\"email\" class=\"form-control\" id=\"email\" name=\"email\" required=\"\">",
+                      "target": [
+                        "#email"
+                      ]
+                    },
+                    {
+                      "html": "<label for=\"password\" class=\"form-label\">Password</label>",
+                      "target": [
+                        "label[for=\"password\"]"
+                      ]
+                    },
+                    {
+                      "html": "<input type=\"password\" class=\"form-control\" id=\"password\" name=\"password\" required=\"\">",
+                      "target": [
+                        "#password"
+                      ]
+                    },
+                    {
+                      "html": "<button class=\"btn btn-primary w-100\" type=\"submit\">Sign in</button>",
+                      "target": [
+                        ".btn"
+                      ]
+                    }
+                  ]
+                }
+              ],
+              "failureSummary": "Fix any of the following:\n  Some page content is not contained by landmarks",
+              "html": "<html lang=\"en\">",
+              "impact": "moderate",
+              "none": [],
+              "target": [
+                "html"
+              ]
+            }
+          ],
+          "tags": [
+            "cat.keyboard",
+            "best-practice"
+          ]
+        }
+      ]
+    }
+  ]
+}

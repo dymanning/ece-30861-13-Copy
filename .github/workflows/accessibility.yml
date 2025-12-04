@@ -1,0 +1,66 @@
+name: Accessibility scan (Axe)
+
+on:
+  push:
+    branches: [ main, devDylan ]
+  pull_request:
+    branches: [ main, devDylan ]
+
+jobs:
+  axe-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Install system deps (Chrome)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y wget unzip xvfb libxss1 libappindicator3-1 fonts-liberation libatk-bridge2.0-0 libnss3 libgtk-3-0 libx11-xcb1 libx11-6
+          # Install Chrome stable
+          wget -q -O /tmp/google-chrome-stable_current_amd64.deb https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
+          sudo apt install -y /tmp/google-chrome-stable_current_amd64.deb || true
+
+      - name: Install Python deps
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r phase2/flask_app/requirements.txt
+
+      - name: Start Flask app
+        env:
+          FLASK_SECRET: ${{ secrets.FLASK_SECRET }}
+          JWT_API_URL: ${{ secrets.JWT_API_URL }}
+        run: |
+          # start the app in background
+          nohup python phase2/flask_app/app.py > flask-app.log 2>&1 &
+          # wait for server
+          for i in {1..15}; do
+            if curl -sS http://127.0.0.1:3000/ >/dev/null 2>&1; then
+              echo "app is up"
+              break
+            fi
+            echo "waiting..."
+            sleep 1
+          done
+
+      - name: Run accessibility scorer
+        env:
+          AXE_SCORE_THRESHOLD: '90'
+          AXE_FAIL_ON_CRITICAL: 'true'
+          # list pages to scan, comma-separated
+          PAGES: '/,/login,/register,/dashboard,/admin'
+          TARGET_URL: 'http://127.0.0.1:3000'
+        run: |
+          python phase2/flask_app/tools/accessibility_scorer.py
+
+      - name: Upload accessibility report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: accessibility-report
+          path: accessibility-report.json
