@@ -3,6 +3,8 @@ from functools import wraps
 
 from flask import Flask, render_template, request, redirect, url_for, session, flash
 import requests
+import sqlite3
+from werkzeug.security import generate_password_hash, check_password_hash
 from dotenv import load_dotenv
 
 # Load .env if present
@@ -26,6 +28,18 @@ JWT_VERIFY_PATH = os.environ.get("JWT_VERIFY_PATH", "/auth/me")
 
 def api_url(path: str) -> str:
     return JWT_API_URL.rstrip("/") + path
+
+
+def get_db_path() -> str:
+    # database located at phase2/flask_app/data/allUsers.db
+    return os.path.join(app.root_path, "data", "allUsers.db")
+
+
+def get_db_connection():
+    path = get_db_path()
+    conn = sqlite3.connect(path)
+    conn.row_factory = sqlite3.Row
+    return conn
 
 
 def get_auth_headers():
@@ -108,24 +122,42 @@ def index():
 @app.route("/login", methods=["GET", "POST"])
 def login():
     if request.method == "POST":
-        email = request.form.get("email")
+        user = request.form.get("username")
         password = request.form.get("password")
+        # Try local SQLite authentication first
         try:
-            resp = requests.post(api_url("/auth/login"), json={"email": email, "password": password}, timeout=5)
-        except requests.RequestException:
+            conn = get_db_connection()
+            cur = conn.cursor()
+            # match by email or username
+            cur.execute(
+                "SELECT * FROM verifiedUsers WHERE username = ?",
+                (user)
+            )
+            row = cur.fetchone()
+            conn.close()
+            if row:
+                stored = row["password"]
+                # support both hashed and plaintext stored passwords
+                if stored and (stored.startswith("pbkdf2:") or stored.startswith("sha256$")):
+                    ok = check_password_hash(stored, password)
+                else:
+                    ok = stored == password
+
+                if ok:
+                    # store minimal session info; keep the token key for compatibility
+                    session["token"] = "db-session-" + str(row["userID"])
+                    session["user"] = {"userID": row["userID"], "email": row["email"], "username": row["username"]}
+                    flash("Logged in successfully (local DB).", "success")
+                    next_url = request.args.get("next") or url_for("dashboard")
+                    return redirect(next_url)
+                else:
+                    flash("Login failed. Check credentials.", "danger")
+            else:
+                # no local user found
+                flash("Login failed. Check credentials.", "danger")
+        except sqlite3.Error:
             flash("Unable to reach auth server.", "danger")
             return render_template("login.html")
-
-        if resp.status_code == 200:
-            data = resp.json()
-            token = data.get("access_token") or data.get("token")
-            if token:
-                session["token"] = token
-                flash("Logged in successfully.", "success")
-                next_url = request.args.get("next") or url_for("dashboard")
-                return redirect(next_url)
-        # otherwise
-        flash("Login failed. Check credentials.", "danger")
     return render_template("login.html")
 
 
@@ -134,16 +166,35 @@ def register():
     if request.method == "POST":
         email = request.form.get("email")
         password = request.form.get("password")
+        username = request.form.get("username")
+        # Create user in local SQLite DB
         try:
-            resp = requests.post(api_url("/auth/register"), json={"email": email, "password": password}, timeout=5)
-        except requests.RequestException:
-            flash("Unable to reach auth server.", "danger")
-            return render_template("register.html")
+            conn = get_db_connection()
+            cur = conn.cursor()
+            # check for existing email or username
+            cur.execute("SELECT userID FROM verifiedUsers WHERE email = ? OR username = ?", (email, username))
+            if cur.fetchone():
+                flash("A user with that email or username already exists.", "warning")
+                conn.close()
+                return render_template("register.html")
 
-        if resp.status_code in (200, 201):
+            # compute next userID
+            cur.execute("SELECT MAX(userID) as mx FROM verifiedUsers")
+            row = cur.fetchone()
+            next_id = (row["mx"] or 0) + 1
+
+            hashed = generate_password_hash(password)
+            cur.execute(
+                "INSERT INTO verifiedUsers (userID, email, username, password) VALUES (?, ?, ?, ?)",
+                (next_id, email, username, hashed),
+            )
+            conn.commit()
+            conn.close()
             flash("Registration successful. Please log in.", "success")
             return redirect(url_for("login"))
-        flash("Registration failed. See server response.", "danger")
+        except sqlite3.Error as e:
+            flash("Unable to reach auth server.", "danger")
+            return render_template("register.html")
     return render_template("register.html")
 
 
