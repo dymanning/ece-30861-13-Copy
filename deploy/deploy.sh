@@ -109,6 +109,12 @@ sudo tee "$CW_CONFIG_PATH" > /dev/null <<'CWCONFIG'
 }
 CWCONFIG
 
+# Optionally create CloudWatch Log Groups (useful when deploying to a fresh account).
+# Set environment variable `CREATE_LOG_GROUP=false` to skip group creation.
+CREATE_LOG_GROUP=${CREATE_LOG_GROUP:-true}
+# Default retention in days (set via LOG_RETENTION_DAYS env var)
+LOG_RETENTION_DAYS=${LOG_RETENTION_DAYS:-14}
+
 # Start or reload CloudWatch Agent using the ctl helper if available (ensures it picks up the file:// config), otherwise fall back to systemctl
 if /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl --help >/dev/null 2>&1; then
   echo "Loading CloudWatch agent config with amazon-cloudwatch-agent-ctl"
@@ -121,3 +127,26 @@ else
 fi
 
 echo "[CloudWatch] CloudWatch Agent setup complete."
+
+# Create CloudWatch log groups if requested (requires aws CLI and appropriate IAM role)
+if [ "$CREATE_LOG_GROUP" = "true" ]; then
+  if command -v aws >/dev/null 2>&1; then
+    echo "Creating CloudWatch log groups (if missing) with retention ${LOG_RETENTION_DAYS} days..."
+    AWS_REGION=${AWS_REGION:-us-east-2}
+    # list of groups to ensure exist
+    LOG_GROUPS=("ec2-syslog" "nginx-error" "nginx-access" "app-log" "phase2-app")
+    for lg in "${LOG_GROUPS[@]}"; do
+      # check if log group exists
+      if aws logs describe-log-groups --log-group-name-prefix "$lg" --region "$AWS_REGION" --no-cli-pager | grep -q 'logGroupName'; then
+        echo "Log group $lg already exists (or similar). Ensuring retention..."
+        aws logs put-retention-policy --log-group-name "$lg" --retention-in-days "$LOG_RETENTION_DAYS" --region "$AWS_REGION" || true
+      else
+        echo "Creating log group $lg"
+        aws logs create-log-group --log-group-name "$lg" --region "$AWS_REGION" || true
+        aws logs put-retention-policy --log-group-name "$lg" --retention-in-days "$LOG_RETENTION_DAYS" --region "$AWS_REGION" || true
+      fi
+    done
+  else
+    echo "aws CLI not found; skipping CloudWatch log group creation."
+  fi
+fi
