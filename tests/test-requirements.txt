@@ -1,0 +1,20 @@
+# Test dependencies for ECE 461 Phase 2
+# Install with: pip install -r test-requirements.txt
+
+# Core testing framework
+pytest>=7.4.0
+pytest-cov>=4.1.0
+pytest-asyncio>=0.21.0
+
+# HTTP requests
+requests>=2.31.0
+
+# Database
+sqlalchemy>=2.0.0
+psycopg2-binary>=2.9.0
+
+# Mocking
+pytest-mock>=3.11.0
+
+# Code coverage reporting
+coverage>=7.3.0
