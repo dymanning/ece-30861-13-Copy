@@ -80,27 +80,32 @@ sudo tee "$CW_CONFIG_PATH" > /dev/null <<'CWCONFIG'
           {
             "file_path": "/var/log/syslog",
             "log_group_name": "ec2-syslog",
-            "log_stream_name": "{instance_id}"
+            "log_stream_name": "{instance_id}",
+            "create_log_group": true
           },
           {
             "file_path": "/var/log/nginx/error.log",
             "log_group_name": "nginx-error",
-            "log_stream_name": "{instance_id}"
+            "log_stream_name": "{instance_id}",
+            "create_log_group": true
           },
           {
             "file_path": "/var/log/nginx/access.log",
             "log_group_name": "nginx-access",
-            "log_stream_name": "{instance_id}"
+            "log_stream_name": "{instance_id}",
+            "create_log_group": true
           },
           {
             "file_path": "/var/www/myapp/app.log",
             "log_group_name": "app-log",
-            "log_stream_name": "{instance_id}"
+            "log_stream_name": "{instance_id}",
+            "create_log_group": true
           },
           {
             "file_path": "/var/log/phase2.log",
             "log_group_name": "phase2-app",
-            "log_stream_name": "{instance_id}"
+            "log_stream_name": "{instance_id}",
+            "create_log_group": true
           }
         ]
       }
