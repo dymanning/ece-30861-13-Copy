@@ -215,6 +215,57 @@ __marimo__/
 # Streamlit
 .streamlit/secrets.toml
 
+# Node.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+.npm
+.eslintcache
+.node_repl_history
+*.tgz
+.yarn-integrity
+
+# TypeScript
+*.tsbuildinfo
+dist/
+build/
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+database.db
+
+# Logs
+logs/
+*.log
+phase2/logs/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Test coverage
+htmlcov/
+.coverage
+coverage/
+*.cover
+
+# Temporary files
+*.tmp
+*.temp
+.temp/
+tmp/
+
 # Project-specific
 *.docx
 *.yaml
