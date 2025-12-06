@@ -32,6 +32,15 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from logs_api import router as logs_router
 
+# Test database connection before creating tables
+try:
+    with engine.connect() as connection:
+        print("✓ Database connection successful")
+except Exception as e:
+    print(f"✗ Database connection failed: {e}", file=sys.stderr)
+    print("Please check your DATABASE_URL environment variable.", file=sys.stderr)
+    sys.exit(1)
+
 models.Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="Packages API")
