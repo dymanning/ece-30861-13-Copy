@@ -6,7 +6,14 @@ set -euo pipefail
 
 LOG_FILE="/tmp/deploy/deploy.log"
 mkdir -p /tmp/deploy || true
-exec > >(tee -a "$LOG_FILE") 2>&1
+APP_LOG="/var/www/myapp/app.log"
+# Ensure app log directory and file exist and are writable before redirecting output
+sudo mkdir -p "$(dirname "$APP_LOG")" || true
+sudo touch "$APP_LOG" || true
+sudo chmod 666 "$APP_LOG" || true
+
+# Redirect all stdout/stderr to both the deploy log and the application log so CloudWatch can pick it up
+exec > >(tee -a "$LOG_FILE" "$APP_LOG") 2>&1
 echo "Starting deploy at $(date)"
 
 APP_DIR="/home/ec2-user/app"
