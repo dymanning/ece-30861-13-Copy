@@ -9,11 +9,11 @@ DATABASE_URL = os.getenv("DATABASE_URL")
 
 # If not set, try to construct from individual variables
 if not DATABASE_URL:
-    DB_USER = os.getenv("DB_USER", "user")
-    DB_PASSWORD = os.getenv("DB_PASSWORD", "password")
-    DB_HOST = os.getenv("DB_HOST", "localhost")
-    DB_PORT = os.getenv("DB_PORT", "5432")
-    DB_NAME = os.getenv("DB_NAME", "dbname")
+    DB_USER = os.getenv("DB_USER", os.getenv("DATABASE_USER", "user"))
+    DB_PASSWORD = os.getenv("DB_PASSWORD", os.getenv("DATABASE_PASSWORD", "password"))
+    DB_HOST = os.getenv("DB_HOST", os.getenv("DATABASE_HOST", "localhost"))
+    DB_PORT = os.getenv("DB_PORT", os.getenv("DATABASE_PORT", "5432"))
+    DB_NAME = os.getenv("DB_NAME", os.getenv("DATABASE_NAME", "dbname"))
     
     DATABASE_URL = f"postgresql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
     

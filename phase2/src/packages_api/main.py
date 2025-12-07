@@ -245,13 +245,13 @@ def reset_registry(db: Session = Depends(get_db)):
         # Delete all packages from database
         db.query(models.Package).delete()
         db.commit()
-        
+
         # Clear S3 bucket (optional - can keep for safety)
         # try:
         #     s3.delete_prefix("packages/")
         # except Exception:
         #     pass
-        
+
         return {"message": "Registry is reset"}
     except Exception as e:
         db.rollback()
