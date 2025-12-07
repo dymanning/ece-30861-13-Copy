@@ -7,8 +7,6 @@ import uuid
 import random
 import re
 import hashlib
-import concurrent.futures
-import threading
 
 from fastapi import (
     FastAPI,
@@ -73,8 +71,7 @@ class ArtifactResponse(BaseModel):
 
 class ArtifactQuery(BaseModel):
     name: Optional[str] = None
-    types: Optional[List[str]] = None  # Array of artifact types to filter
-    type: Optional[str] = None  # Single type for backward compatibility
+    type: Optional[str] = None
     version: Optional[str] = None
 
 
@@ -177,11 +174,7 @@ def list_artifacts(
         if query.name and query.name != "*":
             q = q.filter(Artifact.name == query.name)
         
-        # Handle 'types' array (OpenAPI spec)
-        if query.types:
-            q = q.filter(Artifact.artifact_type.in_(query.types))
-        # Handle single 'type' for backward compatibility
-        elif query.type:
+        if query.type:
             q = q.filter(Artifact.artifact_type == query.type)
         
         artifacts = q.all()
@@ -219,30 +212,6 @@ def get_artifact_by_name(
     ]
 
 
-def regex_search_with_timeout(pattern, text, timeout_seconds=0.5):
-    """Execute regex search with timeout to prevent ReDoS attacks"""
-    result = [None]
-    exception = [None]
-    
-    def do_search():
-        try:
-            result[0] = pattern.search(text)
-        except Exception as e:
-            exception[0] = e
-    
-    thread = threading.Thread(target=do_search)
-    thread.daemon = True
-    thread.start()
-    thread.join(timeout_seconds)
-    
-    if thread.is_alive():
-        # Timeout occurred - return no match
-        return None
-    if exception[0]:
-        return None
-    return result[0]
-
-
 @app.post("/artifact/byRegEx")
 def search_by_regex(
     body: ArtifactRegEx = Body(...),
@@ -259,23 +228,12 @@ def search_by_regex(
     matches = []
     
     for art in all_artifacts:
-        try:
-            # Limit text length to prevent excessive processing
-            name_to_check = (art.name or "")[:500]
-            readme_to_check = (art.readme or "")[:2000]
-            
-            # Use timeout-protected regex search
-            name_match = regex_search_with_timeout(pattern, name_to_check, 0.1) if name_to_check else None
-            readme_match = regex_search_with_timeout(pattern, readme_to_check, 0.2) if readme_to_check else None
-            
-            if name_match or readme_match:
-                matches.append({
-                    "name": art.name,
-                    "id": art.id,
-                    "type": art.artifact_type
-                })
-        except Exception:
-            continue
+        if pattern.search(art.name) or (art.readme and pattern.search(art.readme)):
+            matches.append({
+                "name": art.name,
+                "id": art.id,
+                "type": art.artifact_type
+            })
     
     if not matches:
         raise HTTPException(status_code=404, detail="No artifact found under this regex.")
@@ -299,37 +257,22 @@ def rate_model(
         raise HTTPException(status_code=404, detail="Artifact does not exist.")
     
     return {
-        "name": artifact.name,
-        "category": "model",
-        "net_score": 0.65,
-        "net_score_latency": 0.1,
-        "ramp_up_time": 0.6,
-        "ramp_up_time_latency": 0.01,
-        "bus_factor": 0.5,
-        "bus_factor_latency": 0.01,
-        "performance_claims": 0.7,
-        "performance_claims_latency": 0.02,
-        "license": 1.0,
-        "license_latency": 0.01,
-        "dataset_and_code_score": 0.6,
-        "dataset_and_code_score_latency": 0.01,
-        "dataset_quality": 0.7,
-        "dataset_quality_latency": 0.01,
-        "code_quality": 0.8,
-        "code_quality_latency": 0.01,
-        "reproducibility": 0.6,
-        "reproducibility_latency": 0.01,
-        "reviewedness": 0.5,
-        "reviewedness_latency": 0.01,
-        "tree_score": 0.7,
-        "tree_score_latency": 0.01,
-        "size_score": {
-            "raspberry_pi": 0.3,
-            "jetson_nano": 0.5,
-            "desktop_pc": 0.9,
-            "aws_server": 1.0
-        },
-        "size_score_latency": 0.01
+        "BusFactor": 0.5,
+        "BusFactorLatency": 0.01,
+        "Correctness": 0.7,
+        "CorrectnessLatency": 0.02,
+        "RampUp": 0.6,
+        "RampUpLatency": 0.01,
+        "ResponsiveMaintainer": 0.8,
+        "ResponsiveMaintainerLatency": 0.03,
+        "LicenseScore": 1.0,
+        "LicenseScoreLatency": 0.01,
+        "GoodPinningPractice": 0.5,
+        "GoodPinningPracticeLatency": 0.01,
+        "PullRequest": 0.6,
+        "PullRequestLatency": 0.02,
+        "NetScore": 0.65,
+        "NetScoreLatency": 0.1
     }
 
 
