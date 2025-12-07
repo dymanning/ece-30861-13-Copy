@@ -95,6 +95,7 @@ jobs:
           AWS_REGION: ${{ vars.AWS_REGION }}
           S3_BUCKET: ${{ secrets.DEPLOY_S3_BUCKET }}
           ARTIFACT: phase2-artifact-${{ github.sha }}.zip
+          CLOUDWATCH_LOG_GROUP: app-log
         run: |
           # Trigger deployment on EC2 instances tagged with Role=phase2 via SSM
           echo "Sending SSM command to deploy artifact s3://$S3_BUCKET/$ARTIFACT"
@@ -107,6 +108,7 @@ jobs:
             --document-name "AWS-RunShellScript" \
             --targets "Key=tag:Role,Values=phase2" \
             --parameters "{\"commands\":[\"$DEPLOY_CMD\"]}" \
+            --cloud-watch-output-config "{\"CloudWatchLogGroupName\":\"$CLOUDWATCH_LOG_GROUP\",\"CloudWatchOutputEnabled\":true}"
             --comment "Deploy from GitHub Actions: $GITHUB_SHA" \
             --output text || true
 
