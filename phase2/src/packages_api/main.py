@@ -7,6 +7,8 @@ import uuid
 import random
 import re
 import hashlib
+import concurrent.futures
+import threading
 
 from fastapi import (
     FastAPI,
@@ -217,6 +219,30 @@ def get_artifact_by_name(
     ]
 
 
+def regex_search_with_timeout(pattern, text, timeout_seconds=0.5):
+    """Execute regex search with timeout to prevent ReDoS attacks"""
+    result = [None]
+    exception = [None]
+    
+    def do_search():
+        try:
+            result[0] = pattern.search(text)
+        except Exception as e:
+            exception[0] = e
+    
+    thread = threading.Thread(target=do_search)
+    thread.daemon = True
+    thread.start()
+    thread.join(timeout_seconds)
+    
+    if thread.is_alive():
+        # Timeout occurred - return no match
+        return None
+    if exception[0]:
+        return None
+    return result[0]
+
+
 @app.post("/artifact/byRegEx")
 def search_by_regex(
     body: ArtifactRegEx = Body(...),
@@ -233,12 +259,23 @@ def search_by_regex(
     matches = []
     
     for art in all_artifacts:
-        if pattern.search(art.name) or (art.readme and pattern.search(art.readme)):
-            matches.append({
-                "name": art.name,
-                "id": art.id,
-                "type": art.artifact_type
-            })
+        try:
+            # Limit text length to prevent excessive processing
+            name_to_check = (art.name or "")[:500]
+            readme_to_check = (art.readme or "")[:2000]
+            
+            # Use timeout-protected regex search
+            name_match = regex_search_with_timeout(pattern, name_to_check, 0.1) if name_to_check else None
+            readme_match = regex_search_with_timeout(pattern, readme_to_check, 0.2) if readme_to_check else None
+            
+            if name_match or readme_match:
+                matches.append({
+                    "name": art.name,
+                    "id": art.id,
+                    "type": art.artifact_type
+                })
+        except Exception:
+            continue
     
     if not matches:
         raise HTTPException(status_code=404, detail="No artifact found under this regex.")
