@@ -49,6 +49,14 @@ s3 = S3Client()
 # Include log viewer endpoints
 app.include_router(logs_router)
 
+@app.get("/health")
+def health_check():
+    return {"status": "alive"}
+
+@app.get("/")
+def root():
+    return {"message": "Package Registry API"}
+
 
 @app.post("/packages", response_model=PackageOut, status_code=status.HTTP_201_CREATED)
 async def upload_package(
