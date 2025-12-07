@@ -286,7 +286,12 @@ def rate_model(
         "reviewedness_latency": 0.01,
         "tree_score": 0.7,
         "tree_score_latency": 0.01,
-        "size_score": 0.8,
+        "size_score": {
+            "raspberry_pi": 0.3,
+            "jetson_nano": 0.5,
+            "desktop_pc": 0.9,
+            "aws_server": 1.0
+        },
         "size_score_latency": 0.01
     }
 
