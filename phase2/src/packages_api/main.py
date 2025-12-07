@@ -188,6 +188,142 @@ def list_artifacts(
     return results
 
 
+# ============== SPECIFIC ARTIFACT ROUTES (MUST COME BEFORE GENERIC ROUTES) ==============
+
+@app.get("/artifact/byName/{name}")
+def get_artifact_by_name(
+    name: str = Path(...),
+    x_authorization: Optional[str] = Header(None, alias="X-Authorization"),
+    db: Session = Depends(get_db)
+):
+    """List artifact metadata for this name (NON-BASELINE)"""
+    artifacts = db.query(Artifact).filter(Artifact.name == name).all()
+    
+    if not artifacts:
+        raise HTTPException(status_code=404, detail="No such artifact.")
+    
+    return [
+        {
+            "name": art.name,
+            "id": art.id,
+            "type": art.artifact_type
+        }
+        for art in artifacts
+    ]
+
+
+@app.post("/artifact/byRegEx")
+def search_by_regex(
+    body: ArtifactRegEx = Body(...),
+    x_authorization: Optional[str] = Header(None, alias="X-Authorization"),
+    db: Session = Depends(get_db)
+):
+    """Get artifacts matching regex (BASELINE)"""
+    try:
+        pattern = re.compile(body.regex, re.IGNORECASE)
+    except re.error:
+        raise HTTPException(status_code=400, detail="Invalid regex pattern")
+    
+    all_artifacts = db.query(Artifact).all()
+    matches = []
+    
+    for art in all_artifacts:
+        if pattern.search(art.name) or (art.readme and pattern.search(art.readme)):
+            matches.append({
+                "name": art.name,
+                "id": art.id,
+                "type": art.artifact_type
+            })
+    
+    if not matches:
+        raise HTTPException(status_code=404, detail="No artifact found under this regex.")
+    
+    return matches
+
+
+@app.get("/artifact/model/{artifact_id}/rate")
+def rate_model(
+    artifact_id: str = Path(...),
+    x_authorization: Optional[str] = Header(None, alias="X-Authorization"),
+    db: Session = Depends(get_db)
+):
+    """Get ratings for this model artifact (BASELINE)"""
+    artifact = db.query(Artifact).filter(
+        Artifact.id == artifact_id,
+        Artifact.artifact_type == "model"
+    ).first()
+    
+    if not artifact:
+        raise HTTPException(status_code=404, detail="Artifact does not exist.")
+    
+    return {
+        "BusFactor": 0.5,
+        "BusFactorLatency": 0.01,
+        "Correctness": 0.7,
+        "CorrectnessLatency": 0.02,
+        "RampUp": 0.6,
+        "RampUpLatency": 0.01,
+        "ResponsiveMaintainer": 0.8,
+        "ResponsiveMaintainerLatency": 0.03,
+        "LicenseScore": 1.0,
+        "LicenseScoreLatency": 0.01,
+        "GoodPinningPractice": 0.5,
+        "GoodPinningPracticeLatency": 0.01,
+        "PullRequest": 0.6,
+        "PullRequestLatency": 0.02,
+        "NetScore": 0.65,
+        "NetScoreLatency": 0.1
+    }
+
+
+@app.get("/artifact/model/{artifact_id}/lineage")
+def get_artifact_lineage(
+    artifact_id: str = Path(...),
+    x_authorization: Optional[str] = Header(None, alias="X-Authorization"),
+    db: Session = Depends(get_db)
+):
+    """Retrieve the lineage graph for this artifact (BASELINE)"""
+    artifact = db.query(Artifact).filter(
+        Artifact.id == artifact_id,
+        Artifact.artifact_type == "model"
+    ).first()
+    
+    if not artifact:
+        raise HTTPException(status_code=404, detail="Artifact does not exist.")
+    
+    return {
+        "nodes": [
+            {
+                "artifact_id": artifact_id,
+                "name": artifact.name,
+                "source": "config_json"
+            }
+        ],
+        "edges": []
+    }
+
+
+@app.post("/artifact/model/{artifact_id}/license-check")
+def check_license(
+    artifact_id: str = Path(...),
+    body: SimpleLicenseCheckRequest = Body(...),
+    x_authorization: Optional[str] = Header(None, alias="X-Authorization"),
+    db: Session = Depends(get_db)
+):
+    """Assess license compatibility (BASELINE)"""
+    artifact = db.query(Artifact).filter(
+        Artifact.id == artifact_id,
+        Artifact.artifact_type == "model"
+    ).first()
+    
+    if not artifact:
+        raise HTTPException(status_code=404, detail="Artifact does not exist.")
+    
+    return True
+
+
+# ============== GENERIC ARTIFACT ROUTES ==============
+
 @app.post("/artifact/{artifact_type}", status_code=status.HTTP_201_CREATED)
 def create_artifact(
     artifact_type: str = Path(...),
@@ -308,92 +444,6 @@ def delete_artifact(
     return {"message": "Artifact is deleted."}
 
 
-@app.get("/artifact/byName/{name}")
-def get_artifact_by_name(
-    name: str = Path(...),
-    x_authorization: Optional[str] = Header(None, alias="X-Authorization"),
-    db: Session = Depends(get_db)
-):
-    """List artifact metadata for this name (NON-BASELINE)"""
-    artifacts = db.query(Artifact).filter(Artifact.name == name).all()
-    
-    if not artifacts:
-        raise HTTPException(status_code=404, detail="No such artifact.")
-    
-    return [
-        {
-            "name": art.name,
-            "id": art.id,
-            "type": art.artifact_type
-        }
-        for art in artifacts
-    ]
-
-
-@app.post("/artifact/byRegEx")
-def search_by_regex(
-    body: ArtifactRegEx = Body(...),
-    x_authorization: Optional[str] = Header(None, alias="X-Authorization"),
-    db: Session = Depends(get_db)
-):
-    """Get artifacts matching regex (BASELINE)"""
-    try:
-        pattern = re.compile(body.regex, re.IGNORECASE)
-    except re.error:
-        raise HTTPException(status_code=400, detail="Invalid regex pattern")
-    
-    all_artifacts = db.query(Artifact).all()
-    matches = []
-    
-    for art in all_artifacts:
-        if pattern.search(art.name) or (art.readme and pattern.search(art.readme)):
-            matches.append({
-                "name": art.name,
-                "id": art.id,
-                "type": art.artifact_type
-            })
-    
-    if not matches:
-        raise HTTPException(status_code=404, detail="No artifact found under this regex.")
-    
-    return matches
-
-
-@app.get("/artifact/model/{artifact_id}/rate")
-def rate_model(
-    artifact_id: str = Path(...),
-    x_authorization: Optional[str] = Header(None, alias="X-Authorization"),
-    db: Session = Depends(get_db)
-):
-    """Get ratings for this model artifact (BASELINE)"""
-    artifact = db.query(Artifact).filter(
-        Artifact.id == artifact_id,
-        Artifact.artifact_type == "model"
-    ).first()
-    
-    if not artifact:
-        raise HTTPException(status_code=404, detail="Artifact does not exist.")
-    
-    return {
-        "BusFactor": 0.5,
-        "BusFactorLatency": 0.01,
-        "Correctness": 0.7,
-        "CorrectnessLatency": 0.02,
-        "RampUp": 0.6,
-        "RampUpLatency": 0.01,
-        "ResponsiveMaintainer": 0.8,
-        "ResponsiveMaintainerLatency": 0.03,
-        "LicenseScore": 1.0,
-        "LicenseScoreLatency": 0.01,
-        "GoodPinningPractice": 0.5,
-        "GoodPinningPracticeLatency": 0.01,
-        "PullRequest": 0.6,
-        "PullRequestLatency": 0.02,
-        "NetScore": 0.65,
-        "NetScoreLatency": 0.1
-    }
-
-
 @app.get("/artifact/{artifact_type}/{artifact_id}/cost")
 def get_artifact_cost(
     artifact_type: str = Path(...),
@@ -426,52 +476,6 @@ def get_artifact_cost(
                 "total_cost": cost_value
             }
         }
-
-
-@app.get("/artifact/model/{artifact_id}/lineage")
-def get_artifact_lineage(
-    artifact_id: str = Path(...),
-    x_authorization: Optional[str] = Header(None, alias="X-Authorization"),
-    db: Session = Depends(get_db)
-):
-    """Retrieve the lineage graph for this artifact (BASELINE)"""
-    artifact = db.query(Artifact).filter(
-        Artifact.id == artifact_id,
-        Artifact.artifact_type == "model"
-    ).first()
-    
-    if not artifact:
-        raise HTTPException(status_code=404, detail="Artifact does not exist.")
-    
-    return {
-        "nodes": [
-            {
-                "artifact_id": artifact_id,
-                "name": artifact.name,
-                "source": "config_json"
-            }
-        ],
-        "edges": []
-    }
-
-
-@app.post("/artifact/model/{artifact_id}/license-check")
-def check_license(
-    artifact_id: str = Path(...),
-    body: SimpleLicenseCheckRequest = Body(...),
-    x_authorization: Optional[str] = Header(None, alias="X-Authorization"),
-    db: Session = Depends(get_db)
-):
-    """Assess license compatibility (BASELINE)"""
-    artifact = db.query(Artifact).filter(
-        Artifact.id == artifact_id,
-        Artifact.artifact_type == "model"
-    ).first()
-    
-    if not artifact:
-        raise HTTPException(status_code=404, detail="Artifact does not exist.")
-    
-    return True
 
 
 @app.get("/packages")
