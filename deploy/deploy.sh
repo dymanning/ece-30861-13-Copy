@@ -4,13 +4,26 @@
 
 set -euo pipefail
 
+# Determine whether to prefix privileged commands with sudo. When run under SSM the script
+# usually runs as root. If not running as root, use sudo where necessary.
+if [ "$(id -u)" -eq 0 ]; then
+  SUDO=""
+else
+  SUDO="sudo"
+fi
+
 LOG_FILE="/tmp/deploy/deploy.log"
 mkdir -p /tmp/deploy || true
 APP_LOG="/var/www/myapp/app.log"
 # Ensure app log directory and file exist and are writable before redirecting output
-sudo mkdir -p "$(dirname "$APP_LOG")" || true
-sudo touch "$APP_LOG" || true
-sudo chmod 666 "$APP_LOG" || true
+$SUDO mkdir -p "$(dirname "$APP_LOG")" || true
+$SUDO touch "$APP_LOG" || true
+$SUDO chmod 666 "$APP_LOG" || true
+
+# If the script was invoked via sudo from a non-root user, make the app log owned by that user
+if [ -n "${SUDO_USER:-}" ]; then
+  $SUDO chown "${SUDO_USER}:${SUDO_USER}" "$APP_LOG" || true
+fi
 
 # Redirect all stdout/stderr to both the deploy log and the application log so CloudWatch can pick it up
 exec > >(tee -a "$LOG_FILE" "$APP_LOG") 2>&1
@@ -59,9 +72,9 @@ echo "Configuring CloudWatch Logs agent..."
 if ! command -v /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl >/dev/null 2>&1; then
   echo "CloudWatch agent not found. Installing..."
   if command -v yum >/dev/null 2>&1; then
-    sudo yum install -y amazon-cloudwatch-agent || true
+    $SUDO yum install -y amazon-cloudwatch-agent || true
   elif command -v apt-get >/dev/null 2>&1; then
-    sudo apt-get update && sudo apt-get install -y amazon-cloudwatch-agent || true
+    $SUDO apt-get update && $SUDO apt-get install -y amazon-cloudwatch-agent || true
   else
     echo "Could not determine package manager. Skipping CloudWatch agent install."
   fi
@@ -73,10 +86,10 @@ echo "Creating CloudWatch agent config at $CW_CONFIG_PATH"
 sudo mkdir -p "$(dirname "$CW_CONFIG_PATH")"
 
 # Ensure common log directories and the application log exist and are writable
-sudo mkdir -p /var/log/nginx || true
-sudo mkdir -p /var/www/myapp || true
-sudo touch /var/log/nginx/error.log /var/log/nginx/access.log /var/www/myapp/app.log /var/log/phase2.log || true
-sudo chmod 666 /var/log/nginx/error.log /var/log/nginx/access.log /var/www/myapp/app.log /var/log/phase2.log || true
+$SUDO mkdir -p /var/log/nginx || true
+$SUDO mkdir -p /var/www/myapp || true
+$SUDO touch /var/log/nginx/error.log /var/log/nginx/access.log /var/www/myapp/app.log /var/log/phase2.log || true
+$SUDO chmod 666 /var/log/nginx/error.log /var/log/nginx/access.log /var/www/myapp/app.log /var/log/phase2.log || true
 
 sudo tee "$CW_CONFIG_PATH" > /dev/null <<'CWCONFIG'
 {
@@ -130,12 +143,12 @@ LOG_RETENTION_DAYS=${LOG_RETENTION_DAYS:-14}
 # Start or reload CloudWatch Agent using the ctl helper if available (ensures it picks up the file:// config), otherwise fall back to systemctl
 if /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl --help >/dev/null 2>&1; then
   echo "Loading CloudWatch agent config with amazon-cloudwatch-agent-ctl"
-  sudo /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl \
+  $SUDO /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl \
     -a fetch-config -m ec2 -c file:$CW_CONFIG_PATH -s || true
 else
   echo "amazon-cloudwatch-agent-ctl not found; using systemctl to restart agent"
-  sudo systemctl enable amazon-cloudwatch-agent || true
-  sudo systemctl restart amazon-cloudwatch-agent || true
+  $SUDO systemctl enable amazon-cloudwatch-agent || true
+  $SUDO systemctl restart amazon-cloudwatch-agent || true
 fi
 
 echo "[CloudWatch] CloudWatch Agent setup complete."
@@ -161,4 +174,20 @@ if [ "$CREATE_LOG_GROUP" = "true" ]; then
   else
     echo "aws CLI not found; skipping CloudWatch log group creation."
   fi
+fi
+
+# Final: ensure CloudWatch Agent has picked up the new configuration and is running
+if /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl --help >/dev/null 2>&1; then
+  echo "Verifying CloudWatch agent status and reloading configuration"
+  # Try to get status; if it fails, fetch config and start
+  if ! $SUDO /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl -a status >/dev/null 2>&1; then
+    echo "Agent not running or status unavailable; fetching config and starting agent"
+    $SUDO /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl -a fetch-config -m ec2 -c file:$CW_CONFIG_PATH -s || true
+  else
+    echo "Agent appears running; reloading config"
+    $SUDO /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl -a fetch-config -m ec2 -c file:$CW_CONFIG_PATH -s || true
+  fi
+else
+  echo "amazon-cloudwatch-agent-ctl not available; attempting systemctl restart to pick up config"
+  $SUDO systemctl restart amazon-cloudwatch-agent || true
 fi
