@@ -256,23 +256,39 @@ def rate_model(
     if not artifact:
         raise HTTPException(status_code=404, detail="Artifact does not exist.")
     
+    # Return ModelRating per OpenAPI spec with all required fields
     return {
-        "BusFactor": 0.5,
-        "BusFactorLatency": 0.01,
-        "Correctness": 0.7,
-        "CorrectnessLatency": 0.02,
-        "RampUp": 0.6,
-        "RampUpLatency": 0.01,
-        "ResponsiveMaintainer": 0.8,
-        "ResponsiveMaintainerLatency": 0.03,
-        "LicenseScore": 1.0,
-        "LicenseScoreLatency": 0.01,
-        "GoodPinningPractice": 0.5,
-        "GoodPinningPracticeLatency": 0.01,
-        "PullRequest": 0.6,
-        "PullRequestLatency": 0.02,
-        "NetScore": 0.65,
-        "NetScoreLatency": 0.1
+        "name": artifact.name,
+        "category": "machine-learning",
+        "net_score": 0.65,
+        "net_score_latency": 0.1,
+        "ramp_up_time": 0.6,
+        "ramp_up_time_latency": 0.01,
+        "bus_factor": 0.5,
+        "bus_factor_latency": 0.01,
+        "performance_claims": 0.7,
+        "performance_claims_latency": 0.02,
+        "license": 1.0,
+        "license_latency": 0.01,
+        "dataset_and_code_score": 0.6,
+        "dataset_and_code_score_latency": 0.02,
+        "dataset_quality": 0.7,
+        "dataset_quality_latency": 0.01,
+        "code_quality": 0.8,
+        "code_quality_latency": 0.02,
+        "reproducibility": 0.6,
+        "reproducibility_latency": 0.03,
+        "reviewedness": 0.5,
+        "reviewedness_latency": 0.01,
+        "tree_score": 0.7,
+        "tree_score_latency": 0.02,
+        "size_score": {
+            "raspberry_pi": 0.3,
+            "jetson_nano": 0.5,
+            "desktop_pc": 0.9,
+            "aws_server": 1.0
+        },
+        "size_score_latency": 0.01
     }
 
 
