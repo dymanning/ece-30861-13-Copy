@@ -278,6 +278,48 @@ curl -X GET "http://localhost:3000/artifact/byName/audience-classifier" \
 
 ---
 
+## Audit Logging & Export
+
+The Python `packages_api` service now records audit events for package operations and exposes an admin-only export endpoint.
+
+- **Events captured:** package upload, download (including component name), update, and delete. Each record stores `action`, `user_id`, `resource` (package id), `resource_type`, `success`, optional `metadata_json`, and `created_at`.
+- **User identity:** supplied via `X-User-Id` header (placeholder until full auth wiring). Missing header is allowed and stored as `null`.
+- **Storage:** persisted in the `audit_logs` table (created automatically via SQLAlchemy metadata).
+- **Export endpoint:** `GET /audit/logs` (guarded by `logs_api.require_admin`).
+  - Filters: `start` (ISO datetime), `end`, `user_id`, `action`, and `limit` (1-1000, default 100).
+  - Response: JSON array of audit rows.
+
+Example: fetch the last 20 upload events for user `alice` between two timestamps.
+
+```bash
+curl -G "http://localhost:8000/audit/logs" \
+  -H "X-User-Id: admin" \
+  --data-urlencode "user_id=alice" \
+  --data-urlencode "action=package.upload" \
+  --data-urlencode "start=2025-12-01T00:00:00Z" \
+  --data-urlencode "end=2025-12-31T23:59:59Z" \
+  --data-urlencode "limit=20"
+```
+
+Sample response:
+
+```json
+[
+  {
+    "id": 42,
+    "action": "package.upload",
+    "user_id": "alice",
+    "resource": "10",
+    "resource_type": "package",
+    "success": true,
+    "metadata_json": {"version": "1.0", "s3_uri": "s3://..."},
+    "created_at": "2025-12-07T19:53:24Z"
+  }
+]
+```
+
+---
+
 ## API Response Examples
 
 ### Success Response (200)

@@ -19,7 +19,7 @@ from fastapi import (
     Body,
 )
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 from sqlalchemy import Column, Integer, String, DateTime, JSON, Text
@@ -27,6 +27,8 @@ from sqlalchemy.sql import func
 from enum import Enum
 
 from .database import engine, get_db, Base
+from .audit_api import router as audit_router
+from . import models as pkg_models  # registers Package/AuditLog models
 
 # ============== MODELS ==============
 
@@ -47,6 +49,7 @@ class Artifact(Base):
 Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="ECE 461 Artifact Registry")
+app.include_router(audit_router)
 
 # ============== SCHEMAS ==============
 
@@ -54,9 +57,8 @@ class ArtifactMetadata(BaseModel):
     name: str
     id: str
     type: str
-    
-    class Config:
-        orm_mode = True
+
+    model_config = ConfigDict(from_attributes=True)
 
 
 class ArtifactData(BaseModel):
@@ -77,9 +79,8 @@ class ArtifactQuery(BaseModel):
 
 class ArtifactRegEx(BaseModel):
     regex: str = Field(..., alias="regex")
-    
-    class Config:
-        populate_by_name = True
+
+    model_config = ConfigDict(populate_by_name=True)
 
 
 class AuthenticationRequest(BaseModel):
