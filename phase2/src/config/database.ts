@@ -11,12 +11,7 @@ class Database {
   private isConnected: boolean = false;
 
   constructor() {
-    this.pool = new Pool({
-      host: config.database.host,
-      port: config.database.port,
-      database: config.database.database,
-      user: config.database.user,
-      password: config.database.password,
+    const baseConfig = {
       ssl: config.database.ssl
         ? {
             rejectUnauthorized: false, // For AWS RDS
@@ -25,7 +20,23 @@ class Database {
       max: config.database.max,
       idleTimeoutMillis: config.database.idleTimeoutMillis,
       connectionTimeoutMillis: config.database.connectionTimeoutMillis,
-    });
+    };
+
+    if (config.database.connectionString) {
+      this.pool = new Pool({
+        ...baseConfig,
+        connectionString: config.database.connectionString,
+      });
+    } else {
+      this.pool = new Pool({
+        ...baseConfig,
+        host: config.database.host,
+        port: config.database.port,
+        database: config.database.database,
+        user: config.database.user,
+        password: config.database.password,
+      });
+    }
 
     // Handle pool errors
     this.pool.on('error', (err) => {

@@ -138,6 +138,7 @@ export interface QueryResult<T> {
 // ============================================
 
 export interface DatabaseConfig {
+  connectionString?: string;
   host: string;
   port: number;
   database: string;
