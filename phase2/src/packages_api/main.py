@@ -49,6 +49,23 @@ s3 = S3Client()
 # Include log viewer endpoints
 app.include_router(logs_router)
 
+
+@app.get("/health")
+def health_check():
+    return {"status": "alive"}
+
+
+@app.get("/")
+def root():
+    return {"message": "Package Registry API"}
+
+
+@app.post("/auth/login")
+def login(username: str = Form(...), password: str = Form(...)):
+    """Simple login stub that always succeeds for demo/testing."""
+    token = uuid.uuid4().hex
+    return {"access_token": token, "token_type": "bearer", "user": {"username": username}}
+
 @app.get("/health")
 def health_check():
     return {"status": "alive"}
@@ -94,6 +111,13 @@ async def upload_package(
         raise HTTPException(status_code=500, detail="Failed to upload file to S3")
 
     return pkg
+
+
+@app.get("/packages")
+def list_packages(db: Session = Depends(get_db)):
+    """Return all packages (used by reset verification tests)."""
+    pkgs = db.query(models.Package).all()
+    return [PackageOut.from_orm(p) for p in pkgs]
 
 
 @app.get("/packages/{pkg_id}")
@@ -250,15 +274,15 @@ def get_tracks():
 def reset_registry(db: Session = Depends(get_db)):
     """Reset the registry to a system default state"""
     try:
-        # Delete all packages from database
-        db.query(models.Package).delete()
-        db.commit()
+        # Drop and recreate tables to guarantee a clean slate
+        models.Base.metadata.drop_all(bind=engine)
+        models.Base.metadata.create_all(bind=engine)
 
-        # Clear S3 bucket (optional - can keep for safety)
-        # try:
-        #     s3.delete_prefix("packages/")
-        # except Exception:
-        #     pass
+        # Clear S3 bucket/local dir content for package artifacts
+        try:
+            s3.delete_prefix("packages/")
+        except Exception:
+            pass
 
         return {"message": "Registry is reset"}
     except Exception as e:
