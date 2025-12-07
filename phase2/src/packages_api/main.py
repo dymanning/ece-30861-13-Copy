@@ -71,7 +71,8 @@ class ArtifactResponse(BaseModel):
 
 class ArtifactQuery(BaseModel):
     name: Optional[str] = None
-    type: Optional[str] = None
+    types: Optional[List[str]] = None  # Array of artifact types to filter
+    type: Optional[str] = None  # Single type for backward compatibility
     version: Optional[str] = None
 
 
@@ -174,7 +175,11 @@ def list_artifacts(
         if query.name and query.name != "*":
             q = q.filter(Artifact.name == query.name)
         
-        if query.type:
+        # Handle 'types' array (OpenAPI spec)
+        if query.types:
+            q = q.filter(Artifact.artifact_type.in_(query.types))
+        # Handle single 'type' for backward compatibility
+        elif query.type:
             q = q.filter(Artifact.artifact_type == query.type)
         
         artifacts = q.all()
@@ -257,22 +262,32 @@ def rate_model(
         raise HTTPException(status_code=404, detail="Artifact does not exist.")
     
     return {
-        "BusFactor": 0.5,
-        "BusFactorLatency": 0.01,
-        "Correctness": 0.7,
-        "CorrectnessLatency": 0.02,
-        "RampUp": 0.6,
-        "RampUpLatency": 0.01,
-        "ResponsiveMaintainer": 0.8,
-        "ResponsiveMaintainerLatency": 0.03,
-        "LicenseScore": 1.0,
-        "LicenseScoreLatency": 0.01,
-        "GoodPinningPractice": 0.5,
-        "GoodPinningPracticeLatency": 0.01,
-        "PullRequest": 0.6,
-        "PullRequestLatency": 0.02,
-        "NetScore": 0.65,
-        "NetScoreLatency": 0.1
+        "name": artifact.name,
+        "category": "model",
+        "net_score": 0.65,
+        "net_score_latency": 0.1,
+        "ramp_up_time": 0.6,
+        "ramp_up_time_latency": 0.01,
+        "bus_factor": 0.5,
+        "bus_factor_latency": 0.01,
+        "performance_claims": 0.7,
+        "performance_claims_latency": 0.02,
+        "license": 1.0,
+        "license_latency": 0.01,
+        "dataset_and_code_score": 0.6,
+        "dataset_and_code_score_latency": 0.01,
+        "dataset_quality": 0.7,
+        "dataset_quality_latency": 0.01,
+        "code_quality": 0.8,
+        "code_quality_latency": 0.01,
+        "reproducibility": 0.6,
+        "reproducibility_latency": 0.01,
+        "reviewedness": 0.5,
+        "reviewedness_latency": 0.01,
+        "tree_score": 0.7,
+        "tree_score_latency": 0.01,
+        "size_score": 0.8,
+        "size_score_latency": 0.01
     }
 
 
