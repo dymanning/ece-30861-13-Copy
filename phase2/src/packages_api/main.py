@@ -226,3 +226,33 @@ def remove_package(pkg_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail="Failed to delete package from DB")
 
     return
+
+
+@app.get("/tracks")
+def get_tracks():
+    """Return the list of tracks the student plans to implement"""
+    return {
+        "plannedTracks": [
+            "Access control track"
+        ]
+    }
+
+
+@app.delete("/reset")
+def reset_registry(db: Session = Depends(get_db)):
+    """Reset the registry to a system default state"""
+    try:
+        # Delete all packages from database
+        db.query(models.Package).delete()
+        db.commit()
+        
+        # Clear S3 bucket (optional - can keep for safety)
+        # try:
+        #     s3.delete_prefix("packages/")
+        # except Exception:
+        #     pass
+        
+        return {"message": "Registry is reset"}
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to reset registry: {str(e)}")
