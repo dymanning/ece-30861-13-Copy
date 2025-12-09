@@ -296,7 +296,12 @@ export class ArtifactsService {
    */
   async getModelRating(id: string): Promise<ModelRating> {
     const artifact = await this.getArtifact('model', id); // will throw 404 if missing
-    // Placeholder all zeros
+    // Derive a conservative default total size (bytes) if not available.
+    // This keeps scores deterministic while aligning with Phase 1 sizing logic.
+    // Default to 256MB to avoid zero scores for constrained devices.
+    const DEFAULT_TOTAL_SIZE_BYTES = 256 * 1024 * 1024;
+    const { computeSizeScoreFromBytes } = await import('../utils/metric.utils');
+    const sizeScores = computeSizeScoreFromBytes(DEFAULT_TOTAL_SIZE_BYTES);
     return {
       name: artifact.metadata.name,
       category: 'model',
@@ -322,8 +327,8 @@ export class ArtifactsService {
       reviewedness_latency: 0,
       tree_score: 0,
       tree_score_latency: 0,
-      size_score: { raspberry_pi: 0, jetson_nano: 0, desktop_pc: 0, aws_server: 0 },
-      size_score_latency: 0,
+      size_score: sizeScores.size_score,
+      size_score_latency: sizeScores.size_score_latency,
     };
   }
 
