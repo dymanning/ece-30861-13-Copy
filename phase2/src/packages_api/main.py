@@ -28,7 +28,9 @@ from enum import Enum
 
 from .database import engine, get_db, Base
 from .audit_api import router as audit_router
+from .audit import record_audit
 from . import models as pkg_models  # registers Package/AuditLog models
+from ..security import verify_jwt_token, require_role, get_current_user_id
 
 # ============== MODELS ==============
 
@@ -114,6 +116,18 @@ def extract_name_from_url(url: str) -> str:
     return parts[-1] if parts else "unknown"
 
 
+def _audit(db: Session, action: str, claims: Dict[str, Any], resource: Optional[str] = None, metadata: Optional[Dict[str, Any]] = None):
+    user_id = get_current_user_id(claims)
+    record_audit(
+        db,
+        action=action,
+        user_id=user_id,
+        resource=resource,
+        resource_type="artifact",
+        metadata=metadata,
+    )
+
+
 # ============== ENDPOINTS ==============
 
 @app.get("/health")
@@ -146,13 +160,14 @@ def authenticate(body: AuthenticationRequest):
 
 @app.delete("/reset")
 def reset_registry(
-    x_authorization: Optional[str] = Header(None, alias="X-Authorization"),
+    claims: Dict[str, Any] = Depends(require_role("admin")),
     db: Session = Depends(get_db)
 ):
     """Reset the registry to a system default state (BASELINE)"""
     try:
         db.query(Artifact).delete()
         db.commit()
+        _audit(db, "registry.reset", claims, metadata={"action": "reset"})
         return {"message": "Registry is reset."}
     except Exception as e:
         db.rollback()
@@ -163,7 +178,7 @@ def reset_registry(
 def list_artifacts(
     queries: List[ArtifactQuery] = Body(...),
     offset: Optional[str] = Query(None),
-    x_authorization: Optional[str] = Header(None, alias="X-Authorization"),
+    claims: Dict[str, Any] = Depends(verify_jwt_token),
     db: Session = Depends(get_db)
 ):
     """Get the artifacts from the registry (BASELINE)"""
@@ -194,7 +209,7 @@ def list_artifacts(
 @app.get("/artifact/byName/{name}")
 def get_artifact_by_name(
     name: str = Path(...),
-    x_authorization: Optional[str] = Header(None, alias="X-Authorization"),
+    claims: Dict[str, Any] = Depends(verify_jwt_token),
     db: Session = Depends(get_db)
 ):
     """List artifact metadata for this name (NON-BASELINE)"""
@@ -216,10 +231,13 @@ def get_artifact_by_name(
 @app.post("/artifact/byRegEx")
 def search_by_regex(
     body: ArtifactRegEx = Body(...),
-    x_authorization: Optional[str] = Header(None, alias="X-Authorization"),
+    claims: Dict[str, Any] = Depends(verify_jwt_token),
     db: Session = Depends(get_db)
 ):
     """Get artifacts matching regex (BASELINE)"""
+    if len(body.regex) > 200:
+        # Risk: ReDoS via extremely large regex; mitigation: bound length
+        raise HTTPException(status_code=400, detail="Regex too long")
     try:
         pattern = re.compile(body.regex, re.IGNORECASE)
     except re.error:
@@ -245,7 +263,7 @@ def search_by_regex(
 @app.get("/artifact/model/{artifact_id}/rate")
 def rate_model(
     artifact_id: str = Path(...),
-    x_authorization: Optional[str] = Header(None, alias="X-Authorization"),
+    claims: Dict[str, Any] = Depends(verify_jwt_token),
     db: Session = Depends(get_db)
 ):
     """Get ratings for this model artifact (BASELINE)"""
@@ -296,7 +314,7 @@ def rate_model(
 @app.get("/artifact/model/{artifact_id}/lineage")
 def get_artifact_lineage(
     artifact_id: str = Path(...),
-    x_authorization: Optional[str] = Header(None, alias="X-Authorization"),
+    claims: Dict[str, Any] = Depends(verify_jwt_token),
     db: Session = Depends(get_db)
 ):
     """Retrieve the lineage graph for this artifact (BASELINE)"""
@@ -324,7 +342,7 @@ def get_artifact_lineage(
 def check_license(
     artifact_id: str = Path(...),
     body: SimpleLicenseCheckRequest = Body(...),
-    x_authorization: Optional[str] = Header(None, alias="X-Authorization"),
+    claims: Dict[str, Any] = Depends(verify_jwt_token),
     db: Session = Depends(get_db)
 ):
     """Assess license compatibility (BASELINE)"""
@@ -345,7 +363,7 @@ def check_license(
 def create_artifact(
     artifact_type: str = Path(...),
     body: ArtifactData = Body(...),
-    x_authorization: Optional[str] = Header(None, alias="X-Authorization"),
+    claims: Dict[str, Any] = Depends(verify_jwt_token),
     db: Session = Depends(get_db)
 ):
     """Register a new artifact (BASELINE)"""
@@ -370,6 +388,7 @@ def create_artifact(
         db.add(artifact)
         db.commit()
         db.refresh(artifact)
+        _audit(db, "artifact.create", claims, resource=artifact.id, metadata={"type": artifact.artifact_type})
     except SQLAlchemyError as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
@@ -391,7 +410,7 @@ def create_artifact(
 def get_artifact(
     artifact_type: str = Path(...),
     artifact_id: str = Path(...),
-    x_authorization: Optional[str] = Header(None, alias="X-Authorization"),
+    claims: Dict[str, Any] = Depends(verify_jwt_token),
     db: Session = Depends(get_db)
 ):
     """Get artifact by ID (BASELINE)"""
@@ -421,7 +440,7 @@ def update_artifact(
     artifact_type: str = Path(...),
     artifact_id: str = Path(...),
     body: dict = Body(...),
-    x_authorization: Optional[str] = Header(None, alias="X-Authorization"),
+    claims: Dict[str, Any] = Depends(verify_jwt_token),
     db: Session = Depends(get_db)
 ):
     """Update artifact (BASELINE)"""
@@ -437,6 +456,7 @@ def update_artifact(
         artifact.url = body["data"]["url"]
     
     db.commit()
+    _audit(db, "artifact.update", claims, resource=artifact.id, metadata={"type": artifact.artifact_type})
     return {"message": "Artifact is updated."}
 
 
@@ -444,7 +464,7 @@ def update_artifact(
 def delete_artifact(
     artifact_type: str = Path(...),
     artifact_id: str = Path(...),
-    x_authorization: Optional[str] = Header(None, alias="X-Authorization"),
+    claims: Dict[str, Any] = Depends(require_role("admin")),
     db: Session = Depends(get_db)
 ):
     """Delete artifact (NON-BASELINE)"""
@@ -458,6 +478,7 @@ def delete_artifact(
     
     db.delete(artifact)
     db.commit()
+    _audit(db, "artifact.delete", claims, resource=artifact.id, metadata={"type": artifact.artifact_type})
     return {"message": "Artifact is deleted."}
 
 
@@ -466,7 +487,7 @@ def get_artifact_cost(
     artifact_type: str = Path(...),
     artifact_id: str = Path(...),
     dependency: bool = Query(False),
-    x_authorization: Optional[str] = Header(None, alias="X-Authorization"),
+    claims: Dict[str, Any] = Depends(verify_jwt_token),
     db: Session = Depends(get_db)
 ):
     """Get the cost of an artifact (BASELINE)"""
@@ -496,7 +517,7 @@ def get_artifact_cost(
 
 
 @app.get("/packages")
-def list_packages(db: Session = Depends(get_db)):
+def list_packages(claims: Dict[str, Any] = Depends(verify_jwt_token), db: Session = Depends(get_db)):
     """Return all artifacts as packages (legacy compatibility)"""
     artifacts = db.query(Artifact).all()
     return [
