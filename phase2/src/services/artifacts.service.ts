@@ -201,6 +201,178 @@ export class ArtifactsService {
   }
 
   /**
+<<<<<<< HEAD
+=======
+   * Create new artifact (spec: POST /artifact/{artifact_type})
+   */
+  async createArtifact(artifact_type: string, data: { url: string }): Promise<Artifact> {
+    if (!data || !data.url) {
+      throw new BadRequestError('artifact_data must include url');
+    }
+    // Derive name from URL segment
+    const urlParts = data.url.split('/').filter(Boolean);
+    const derivedName = urlParts[urlParts.length - 1] || 'unknown-artifact';
+    const id = this.generateId();
+    const type = artifact_type as 'model' | 'dataset' | 'code';
+    // Spec-related ingestion validation: compute quality and reject if < 0.5
+    // For model type only here; extend as needed
+    try {
+      const artifactPreview: Artifact = { metadata: { name: derivedName, id, type }, data: { url: data.url } };
+      // Lazy import to avoid cycles
+      const { computeQualityScore } = await import('../utils/metric.utils');
+      const quality = await computeQualityScore(artifactPreview);
+      if (quality < 0.5) {
+        throw new FailedDependencyError('Artifact is not registered due to the disqualified rating');
+      }
+    } catch (err) {
+      if (err instanceof BadRequestError || err instanceof FailedDependencyError) {
+        throw err;
+      }
+      // If metric evaluation fails, return 202 (deferred) per spec could be implemented in controller
+      // For now, propagate error as 500
+      handleDatabaseError(err);
+    }
+    const insertSql = `INSERT INTO artifacts (id, name, type, url, readme, metadata) VALUES ($1,$2,$3,$4,$5,$6)`;
+    const params = [id, derivedName, type, data.url, '', JSON.stringify({})];
+    try {
+      await db.query(insertSql, params);
+    } catch (error: any) {
+      if (error.code === '23505') { // unique violation
+        throw new ConflictError('Artifact exists already');
+      }
+      handleDatabaseError(error);
+    }
+    return {
+      metadata: { name: derivedName, id, type },
+      data: { url: data.url },
+    };
+  }
+
+  /**
+   * Retrieve artifact (GET /artifacts/{artifact_type}/{id})
+   */
+  async getArtifact(artifact_type: string, id: string): Promise<Artifact> {
+    const sql = `SELECT id, name, type, url, readme, metadata FROM artifacts WHERE id = $1 AND type = $2`;
+    const result = await db.query<ArtifactEntity>(sql, [id, artifact_type]);
+    if (result.rowCount === 0) {
+      throw new NotFoundError('Artifact does not exist');
+    }
+    const row = result.rows[0];
+    return {
+      metadata: { name: row.name, id: row.id, type: row.type },
+      data: { url: row.url },
+    };
+  }
+
+  /**
+   * Update artifact (PUT /artifacts/{artifact_type}/{id})
+   */
+  async updateArtifact(artifact_type: string, id: string, artifact: Artifact): Promise<void> {
+    if (artifact.metadata.id !== id || artifact.metadata.type !== artifact_type) {
+      throw new BadRequestError('Name/id/type mismatch');
+    }
+    const sql = `UPDATE artifacts SET url = $1, updated_at = NOW() WHERE id = $2 AND type = $3`;
+    const result = await db.query(sql, [artifact.data.url, id, artifact_type]);
+    if (result.rowCount === 0) {
+      throw new NotFoundError('Artifact does not exist');
+    }
+  }
+
+  /**
+   * Delete artifact (DELETE /artifacts/{artifact_type}/{id})
+   */
+  async deleteArtifact(artifact_type: string, id: string): Promise<void> {
+    const sql = `DELETE FROM artifacts WHERE id = $1 AND type = $2`;
+    const result = await db.query(sql, [id, artifact_type]);
+    if (result.rowCount === 0) {
+      throw new NotFoundError('Artifact does not exist');
+    }
+  }
+
+  /**
+   * Get model rating (GET /artifact/model/{id}/rate) — stub implementation
+   */
+  async getModelRating(id: string): Promise<ModelRating> {
+    const artifact = await this.getArtifact('model', id); // will throw 404 if missing
+    // Derive a conservative default total size (bytes) if not available.
+    // This keeps scores deterministic while aligning with Phase 1 sizing logic.
+    // Default to 256MB to avoid zero scores for constrained devices.
+    const DEFAULT_TOTAL_SIZE_BYTES = 256 * 1024 * 1024;
+    const { computeSizeScoreFromBytes } = await import('../utils/metric.utils');
+    const sizeScores = computeSizeScoreFromBytes(DEFAULT_TOTAL_SIZE_BYTES);
+    return {
+      name: artifact.metadata.name,
+      category: 'model',
+      net_score: 0,
+      net_score_latency: 0,
+      ramp_up_time: 0,
+      ramp_up_time_latency: 0,
+      bus_factor: 0,
+      bus_factor_latency: 0,
+      performance_claims: 0,
+      performance_claims_latency: 0,
+      license: 0,
+      license_latency: 0,
+      dataset_and_code_score: 0,
+      dataset_and_code_score_latency: 0,
+      dataset_quality: 0,
+      dataset_quality_latency: 0,
+      code_quality: 0,
+      code_quality_latency: 0,
+      reproducibility: 0,
+      reproducibility_latency: 0,
+      reviewedness: 0,
+      reviewedness_latency: 0,
+      tree_score: 0,
+      tree_score_latency: 0,
+      size_score: sizeScores.size_score,
+      size_score_latency: sizeScores.size_score_latency,
+    };
+  }
+
+  /**
+   * Get artifact cost (GET /artifact/{artifact_type}/{id}/cost) — stub
+   */
+  async getArtifactCost(artifact_type: string, id: string, includeDependencies: boolean): Promise<ArtifactCost> {
+    await this.getArtifact(artifact_type, id); // ensure exists
+    // Placeholder: deterministic pseudo cost
+    const base = id.split('').reduce((acc, c) => acc + (c.charCodeAt(0) % 10), 0) * 1.5;
+    const total = includeDependencies ? base * 3 : base;
+    const entry: any = { total_cost: parseFloat(total.toFixed(2)) };
+    if (includeDependencies) {
+      entry.standalone_cost = parseFloat(base.toFixed(2));
+    }
+    return { [id]: entry };
+  }
+
+  /**
+   * Get lineage graph (GET /artifact/model/{id}/lineage) — stub
+   */
+  async getLineage(id: string): Promise<ArtifactLineageGraph> {
+    await this.getArtifact('model', id);
+    return {
+      nodes: [
+        { artifact_id: id, name: 'root-model', source: 'config_json' },
+      ],
+      edges: [],
+    };
+  }
+
+  /**
+   * License check (POST /artifact/model/{id}/license-check) — stub
+   */
+  async licenseCheck(id: string, github_url: string): Promise<boolean> {
+    await this.getArtifact('model', id);
+    // Placeholder: approve if URL contains 'github'
+    return /github\.com/.test(github_url);
+  }
+
+  private generateId(): string {
+    return Array.from({ length: 10 }, () => Math.floor(Math.random() * 10)).join('');
+  }
+
+  /**
+>>>>>>> 7e0ae15 (updated phase2 size metric calculation)
    * Get total artifact count (with safety limit)
    * Used for DoS prevention in enumerate endpoint
    * 
