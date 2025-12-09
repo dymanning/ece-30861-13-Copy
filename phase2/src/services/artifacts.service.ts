@@ -73,7 +73,7 @@ export class ArtifactsService {
           conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
         queryParts.push(`
-          SELECT DISTINCT id, name, type
+          SELECT DISTINCT id, name, type, uri, size, rating, cost, dependencies, metadata
           FROM artifacts
           ${whereClause}
         `);
@@ -124,7 +124,7 @@ export class ArtifactsService {
       // SQL query with PostgreSQL regex operator
       // Search in both name and readme fields
       const sql = `
-        SELECT DISTINCT id, name, type
+        SELECT DISTINCT id, name, type, uri, size, rating, cost, dependencies, metadata
         FROM artifacts
         WHERE 
           name ~* $1
@@ -174,7 +174,7 @@ export class ArtifactsService {
   async searchByName(name: string): Promise<ArtifactMetadata[]> {
     try {
       const sql = `
-        SELECT id, name, type
+        SELECT id, name, type, uri, size, rating, cost, dependencies, metadata
         FROM artifacts
         WHERE name = $1
         ORDER BY created_at DESC, id
@@ -314,6 +314,12 @@ export class ArtifactsService {
       id: entity.id,
       name: entity.name,
       type: entity.type,
+      uri: entity.uri,
+      size: entity.size,
+      metadata: entity.metadata,
+      rating: entity.rating,
+      cost: entity.cost,
+      dependencies: entity.dependencies,
     };
   }
 
@@ -336,3 +342,4 @@ export class ArtifactsService {
 
 // Export singleton instance
 export const artifactsService = new ArtifactsService();
+
