@@ -15,6 +15,8 @@ import {
   BadRequestError,
   NotFoundError,
   PayloadTooLargeError,
+  ConflictError,
+  FailedDependencyError,
   handleDatabaseError,
 } from '../middleware/error.middleware';
 

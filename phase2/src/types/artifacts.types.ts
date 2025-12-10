@@ -239,6 +239,9 @@ export interface AppConfig {
     enabled: boolean;
     jwtSecret: string;
   };
+  features?: {
+    enableBedrock: boolean;
+  };
 }
 
 // ============================================
