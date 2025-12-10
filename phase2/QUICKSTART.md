@@ -165,6 +165,7 @@ npm start
 | `/artifacts` | POST | Enumerate with pagination | ✅ BASELINE |
 | `/artifact/byRegEx` | POST | Regex search | ✅ BASELINE |
 | `/artifact/byName/:name` | GET | Exact name search | ✅ NON-BASELINE |
+| `/audit/logs` | GET | Export audit logs (admin) | ✅ |
 
 ---
 

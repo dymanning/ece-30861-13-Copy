@@ -8,6 +8,11 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from pydantic import BaseModel
 
+try:  # Support both package and top-level import contexts
+    from .security import require_admin
+except ImportError:  # pragma: no cover - fallback for direct module import
+    from security import require_admin
+
 
 router = APIRouter(prefix="/logs", tags=["logs"])
 
@@ -26,30 +31,10 @@ class LogResponse(BaseModel):
     limit: int
 
 
-def get_current_user_role() -> str:
-    """
-    Mock function to get current user's role from auth token
-    In production, this would verify JWT and extract role
-    """
-    # TODO: Implement actual JWT verification and role extraction
-    # For now, return a placeholder
-    return "admin"  # Mock admin role
-
-
-def require_admin(role: str = Depends(get_current_user_role)):
-    """Dependency to ensure only admin users can access"""
-    if role != "admin":
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Admin privileges required"
-        )
-    return role
-
-
 @router.get("/deploy", response_model=LogResponse)
 async def get_deploy_logs(
     limit: int = Query(100, ge=1, le=1000),
-    role: str = Depends(require_admin)
+    _: dict = Depends(require_admin)
 ):
     """
     Get recent deployment logs (admin only)
@@ -114,7 +99,7 @@ async def get_deploy_logs(
 @router.get("/app", response_model=LogResponse)
 async def get_app_logs(
     limit: int = Query(100, ge=1, le=1000),
-    role: str = Depends(require_admin)
+    _: dict = Depends(require_admin)
 ):
     """
     Get recent application logs (admin only)

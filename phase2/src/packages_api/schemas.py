@@ -1,6 +1,6 @@
 from typing import Optional, Dict, Any
 from datetime import datetime
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 
 class PackageCreate(BaseModel):
@@ -23,5 +23,17 @@ class PackageOut(BaseModel):
     metadata_json: Optional[Dict[str, Any]] = None
     created_at: Optional[datetime] = None
 
-    class Config:
-        orm_mode = True
+    model_config = ConfigDict(from_attributes=True)
+
+
+class AuditLogOut(BaseModel):
+    id: int
+    action: str
+    user_id: Optional[str] = None
+    resource: Optional[str] = None
+    resource_type: Optional[str] = None
+    success: bool
+    metadata_json: Optional[Dict[str, Any]] = None
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)

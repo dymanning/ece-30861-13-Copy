@@ -15,6 +15,9 @@
 #   for privileged operations so it works both under SSM (root) and locally.
 # - CloudWatch agent setup/reload runs after logging is configured and is
 #   executed in a non-blocking, best-effort way so it doesn't stall SSM.
+# - SECURITY: run the app behind HTTPS (ALB/NGINX with TLS cert). This script
+#   only sets up the app; ensure TLS termination is configured in the load
+#   balancer or reverse proxy.
 
 set -euo pipefail
 
