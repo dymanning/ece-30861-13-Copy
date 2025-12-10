@@ -300,6 +300,38 @@ export class ArtifactsService {
     const DEFAULT_TOTAL_SIZE_BYTES = 256 * 1024 * 1024;
     const { computeSizeScoreFromBytes } = await import('../utils/metric.utils');
     const sizeScores = computeSizeScoreFromBytes(DEFAULT_TOTAL_SIZE_BYTES);
+    // Optionally enrich with Bedrock insights (blended conservatively)
+    let performance_claims = 0;
+    let code_quality = 0;
+    let dataset_quality = 0;
+    let reviewedness = 0;
+    if (config.features?.enableBedrock) {
+      try {
+        const { summarizePerformanceClaims, assessCodeQuality, assessDatasetQuality } = await import('./bedrock.service');
+        const [perf, code, data] = await Promise.allSettled([
+          summarizePerformanceClaims({ name: artifact.metadata.name }),
+          assessCodeQuality({ name: artifact.metadata.name }),
+          assessDatasetQuality({ name: artifact.metadata.name }),
+        ]);
+        const alpha = 0.7; // favor deterministic (currently 0) but prepare for future calibration
+        if (perf.status === 'fulfilled' && typeof perf.value.performance_claims === 'number') {
+          performance_claims = Math.max(0, Math.min(1, (alpha * performance_claims) + ((1 - alpha) * perf.value.performance_claims)));
+        }
+        if (code.status === 'fulfilled') {
+          if (typeof code.value.code_quality === 'number') {
+            code_quality = Math.max(0, Math.min(1, (alpha * code_quality) + ((1 - alpha) * code.value.code_quality)));
+          }
+          if (typeof code.value.reviewedness === 'number') {
+            reviewedness = Math.max(0, Math.min(1, (alpha * reviewedness) + ((1 - alpha) * code.value.reviewedness)));
+          }
+        }
+        if (data.status === 'fulfilled' && typeof data.value.dataset_quality === 'number') {
+          dataset_quality = Math.max(0, Math.min(1, (alpha * dataset_quality) + ((1 - alpha) * data.value.dataset_quality)));
+        }
+      } catch (e) {
+        // soft-fail; keep deterministic values
+      }
+    }
     return {
       name: artifact.metadata.name,
       category: 'model',
@@ -309,19 +341,19 @@ export class ArtifactsService {
       ramp_up_time_latency: 0,
       bus_factor: 0,
       bus_factor_latency: 0,
-      performance_claims: 0,
+      performance_claims,
       performance_claims_latency: 0,
       license: 0,
       license_latency: 0,
-      dataset_and_code_score: 0,
+      dataset_and_code_score: dataset_quality,
       dataset_and_code_score_latency: 0,
-      dataset_quality: 0,
+      dataset_quality,
       dataset_quality_latency: 0,
-      code_quality: 0,
+      code_quality,
       code_quality_latency: 0,
       reproducibility: 0,
       reproducibility_latency: 0,
-      reviewedness: 0,
+      reviewedness,
       reviewedness_latency: 0,
       tree_score: 0,
       tree_score_latency: 0,
