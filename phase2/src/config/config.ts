@@ -45,6 +45,9 @@ export const config: AppConfig = {
     enabled: process.env.AUTH_ENABLED === 'true',
     jwtSecret: process.env.JWT_SECRET || 'change_this_in_production',
   },
+  features: {
+    enableBedrock: process.env.ENABLE_BEDROCK === 'true',
+  },
 };
 
 /**
