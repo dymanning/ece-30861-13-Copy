@@ -35,13 +35,11 @@ export async function validateModelSchema(artifact: Artifact): Promise<boolean> 
 export function computeSizeScoreFromBytes(totalSizeBytes: number): {
   size_score: { raspberry_pi: number; jetson_nano: number; desktop_pc: number; aws_server: number };
   size_score_latency: number;
-  size_metric: number;
 } {
   if (!totalSizeBytes || totalSizeBytes <= 0) {
     return {
       size_score: { raspberry_pi: 0, jetson_nano: 0, desktop_pc: 0, aws_server: 0 },
       size_score_latency: 0,
-      size_metric: 0,
     };
   }
 
@@ -64,12 +62,5 @@ export function computeSizeScoreFromBytes(totalSizeBytes: number): {
     aws_server: parseFloat(scoreFor(CAPACITY.aws_server).toFixed(3)),
   };
 
-  const size_metric = Math.max(
-    size_score.raspberry_pi,
-    size_score.jetson_nano,
-    size_score.desktop_pc,
-    size_score.aws_server,
-  );
-
-  return { size_score, size_score_latency: 0, size_metric: parseFloat(size_metric.toFixed(3)) };
+  return { size_score, size_score_latency: 0 };
 }
