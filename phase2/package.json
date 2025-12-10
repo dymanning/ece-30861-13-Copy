@@ -31,7 +31,8 @@
     "jsonwebtoken": "^9.0.3",
     "pg": "^8.11.3",
     "safe-regex": "^2.1.1",
-    "winston": "^3.11.0"
+    "winston": "^3.11.0",
+    "@aws-sdk/client-bedrock-runtime": "^3.624.0"
   },
   "devDependencies": {
     "@types/cors": "^2.8.17",
