@@ -1,9 +1,10 @@
 import os
 import sys
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, Column, Integer, String, DateTime, Boolean, JSON
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.sql import func
 
 Base = declarative_base()
 
@@ -43,3 +44,19 @@ def get_db():
         yield db
     finally:
         db.close()
+
+
+# ============== MODELS ==============
+# Define models here to ensure they use the same Base
+
+class AuditLog(Base):
+    __tablename__ = "audit_logs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    action = Column(String(255), nullable=False, index=True)
+    user_id = Column(String(255), nullable=True, index=True)
+    resource = Column(String(255), nullable=True)
+    resource_type = Column(String(255), nullable=True)
+    success = Column(Boolean, default=True, nullable=False)
+    metadata_json = Column(JSON, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False, index=True)

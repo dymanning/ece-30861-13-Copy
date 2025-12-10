@@ -25,3 +25,17 @@ class PackageOut(BaseModel):
 
     class Config:
         orm_mode = True
+
+
+class AuditLogOut(BaseModel):
+    id: int
+    action: str
+    user_id: Optional[str] = None
+    resource: Optional[str] = None
+    resource_type: Optional[str] = None
+    success: bool
+    metadata_json: Optional[Dict[str, Any]] = None
+    created_at: datetime
+
+    class Config:
+        orm_mode = True

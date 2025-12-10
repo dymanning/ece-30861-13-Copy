@@ -31,9 +31,7 @@ def get_current_user_role() -> str:
     Mock function to get current user's role from auth token
     In production, this would verify JWT and extract role
     """
-    # TODO: Implement actual JWT verification and role extraction
-    # For now, return a placeholder
-    return "admin"  # Mock admin role
+    return "admin"
 
 
 def require_admin(role: str = Depends(get_current_user_role)):

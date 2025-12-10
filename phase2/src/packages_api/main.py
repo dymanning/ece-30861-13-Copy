@@ -27,6 +27,7 @@ from sqlalchemy.sql import func
 from enum import Enum
 
 from .database import engine, get_db, Base
+from .audit_api import router as audit_router
 
 # ============== MODELS ==============
 
@@ -47,6 +48,9 @@ class Artifact(Base):
 Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="ECE 461 Artifact Registry")
+
+# Include audit logging router
+app.include_router(audit_router)
 
 # ============== SCHEMAS ==============
 
