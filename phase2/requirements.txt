@@ -1,2 +1,1 @@
 bcrypt
-pyjwt[crypto]==2.9.0

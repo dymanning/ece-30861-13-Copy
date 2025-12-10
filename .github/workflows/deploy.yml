@@ -96,13 +96,12 @@ jobs:
           S3_BUCKET: ${{ secrets.DEPLOY_S3_BUCKET }}
           ARTIFACT: phase2-artifact-${{ github.sha }}.zip
           CLOUDWATCH_LOG_GROUP: app-log
-          JWT_SECRET: ${{ secrets.JWT_SECRET }}
         run: |
           # Trigger deployment on EC2 instances tagged with Role=phase2 via SSM
           echo "Sending SSM command to deploy artifact s3://$S3_BUCKET/$ARTIFACT"
           
           # Build the shell command to run on EC2
-          DEPLOY_CMD="export JWT_SECRET='$JWT_SECRET' && mkdir -p /tmp/deploy && cd /tmp/deploy && aws s3 cp s3://$S3_BUCKET/$ARTIFACT . --region $AWS_REGION && unzip -o $ARTIFACT -d /tmp/deploy && bash /tmp/deploy/deploy/deploy.sh"
+          DEPLOY_CMD="mkdir -p /tmp/deploy && cd /tmp/deploy && aws s3 cp s3://$S3_BUCKET/$ARTIFACT . --region $AWS_REGION && unzip -o $ARTIFACT -d /tmp/deploy && bash /tmp/deploy/deploy/deploy.sh"
           
           # Send command via SSM using proper JSON formatting
           aws ssm send-command \
