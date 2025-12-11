@@ -2,9 +2,9 @@ name: Accessibility scan (Axe)
 
 on:
   push:
-    branches: [ main, devDylan ]
+    branches: [ devDylan ]
   pull_request:
-    branches: [ main, devDylan ]
+    branches: [ devDylan ]
 
 jobs:
   axe-scan:
