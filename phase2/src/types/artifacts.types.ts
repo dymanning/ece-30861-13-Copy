@@ -30,11 +30,7 @@ export interface RatingMetrics {
   dataset_and_code_score: number;
 }
 
-export interface MetricScores {
-  quality: number;
-  dependencyScore: number;
-  codeReviewScore: number;
-}
+/* MetricScores interface removed. Use the version from metric.types.ts instead. */
 
 export interface CostMetrics {
   inference_cents: number;
