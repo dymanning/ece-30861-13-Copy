@@ -4,7 +4,8 @@ import { MetricScores } from '../types/metric.types';
 // Placeholder for actual DB logic
 export async function saveArtifactWithMetrics(artifact: Artifact, metrics: MetricScores): Promise<void> {
   // TODO: Implement actual DB save logic
-  // Example: merge metrics into artifact metadata and persist
+  // Commented out to avoid type errors - use artifacts.service.ts instead
+  /*
   const entity: ArtifactEntity = {
     id: artifact.metadata.id,
     name: artifact.metadata.name,
@@ -15,6 +16,7 @@ export async function saveArtifactWithMetrics(artifact: Artifact, metrics: Metri
     created_at: new Date(),
     updated_at: new Date(),
   };
+  */
   // Save entity to DB
   // await db.save(entity)
 }
