@@ -4,28 +4,13 @@ Admin-only access to query and export audit logs.
 """
 from typing import List, Optional
 from datetime import datetime
-from fastapi import APIRouter, Depends, Query, HTTPException, status
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from .database import get_db
 from .schemas import AuditLogOut
 from .audit import query_audit_logs
-
-
-# Local admin dependency (replicates logs_api.require_admin)
-def get_current_user_role() -> str:
-    """Mock: get user role from auth token"""
-    return "admin"
-
-
-def require_admin(role: str = Depends(get_current_user_role)):
-    """Dependency: ensure admin role"""
-    if role != "admin":
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Admin privileges required"
-        )
-    return role
+from ..logs_api import require_admin
 
 
 router = APIRouter(prefix="/audit", tags=["audit"])
