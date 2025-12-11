@@ -13,11 +13,12 @@ export const config: AppConfig = {
   nodeEnv: process.env.NODE_ENV || 'development',
 
   database: {
-    host: process.env.DATABASE_HOST || 'localhost',
-    port: parseInt(process.env.DATABASE_PORT || '5432', 10),
-    database: process.env.DATABASE_NAME || 'artifact_registry',
-    user: process.env.DATABASE_USER || 'postgres',
-    password: process.env.DATABASE_PASSWORD || '',
+    connectionString: process.env.DATABASE_URL,
+    host: process.env.DATABASE_HOST || process.env.DB_HOST || 'localhost',
+    port: parseInt(process.env.DATABASE_PORT || process.env.DB_PORT || '5432', 10),
+    database: process.env.DATABASE_NAME || process.env.DB_NAME || 'artifact_registry',
+    user: process.env.DATABASE_USER || process.env.DB_USER || 'postgres',
+    password: process.env.DATABASE_PASSWORD || process.env.DB_PASSWORD || '',
     ssl: process.env.DATABASE_SSL === 'true',
     max: 20, // Maximum pool size
     idleTimeoutMillis: 30000, // Close idle clients after 30s
@@ -44,6 +45,9 @@ export const config: AppConfig = {
   auth: {
     enabled: process.env.AUTH_ENABLED === 'true',
     jwtSecret: process.env.JWT_SECRET || 'change_this_in_production',
+  },
+  features: {
+    enableBedrock: process.env.ENABLE_BEDROCK === 'true',
   },
 };
 
