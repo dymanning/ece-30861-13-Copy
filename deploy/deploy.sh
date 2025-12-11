@@ -143,6 +143,36 @@ else
   $SUDO systemctl restart amazon-cloudwatch-agent || echo "systemctl restart failed (continuing)"
 fi
 
+# ============= HTTPS/TLS CONFIGURATION =============
+# IMPORTANT: This application now requires HTTPS in production.
+# The app runs on HTTP (port 8000) internally but MUST be behind TLS termination.
+#
+# Choose ONE of the following approaches:
+#
+# OPTION 1: AWS Application Load Balancer (ALB) - RECOMMENDED
+#   - Configure HTTPS listener on ALB (port 443)
+#   - Associate SSL certificate from AWS Certificate Manager (ACM)
+#   - ALB terminates TLS and forwards HTTP to EC2 instance
+#   - Set security group to allow only ALB on port 8000 (no direct internet access)
+#
+# OPTION 2: Nginx Reverse Proxy with Self-Signed Certificate
+#   - Install nginx: sudo yum install nginx (or apt-get on Ubuntu)
+#   - Generate self-signed cert (dev only):
+#     sudo openssl req -x509 -newkey rsa:2048 -nodes \
+#       -out /etc/nginx/cert.pem -keyout /etc/nginx/key.pem -days 365
+#   - Configure /etc/nginx/sites-available/default (see SECURITY.md for full config)
+#   - Run: sudo systemctl restart nginx
+#   - Nginx listens on 443 (HTTPS), forwards to app on 8000 (HTTP)
+#
+# OPTION 3: Uvicorn with SSL (Development Only - NOT for Production)
+#   - Install python ssl dependencies
+#   - Run: uvicorn main:app --ssl-keyfile=key.pem --ssl-certfile=cert.pem
+#
+# ⚠️  WARNING: If none of these are configured, the API runs on plain HTTP!
+#     This allows JWT tokens and sensitive data to be intercepted.
+#     See SECURITY.md for detailed HTTPS setup instructions.
+#
+
 # Optionally ensure CloudWatch Log Group exists (if aws CLI is available)
 CREATE_LOG_GROUP=${CREATE_LOG_GROUP:-true}
 LOG_RETENTION_DAYS=${LOG_RETENTION_DAYS:-14}
@@ -170,4 +200,3 @@ if command -v systemctl >/dev/null 2>&1; then
 fi
 
 echo "=== Deploy script finished at $(date -u) ==="
-

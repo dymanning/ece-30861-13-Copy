@@ -26,8 +26,16 @@ from sqlalchemy import Column, Integer, String, DateTime, JSON, Text
 from sqlalchemy.sql import func
 from enum import Enum
 
-from .database import engine, get_db, Base
+from .database import engine, get_db, Base, AuditLog
 from .audit_api import router as audit_router
+from .audit import record_audit
+from .security import (
+    verify_jwt_token,
+    require_admin,
+    validate_regex_safe,
+    validate_file_size,
+    check_rate_limit,
+)
 
 # ============== MODELS ==============
 
@@ -149,16 +157,44 @@ def authenticate(body: AuthenticationRequest):
 
 @app.delete("/reset")
 def reset_registry(
-    x_authorization: Optional[str] = Header(None, alias="X-Authorization"),
+    token: Dict[str, Any] = Depends(verify_jwt_token),
     db: Session = Depends(get_db)
 ):
-    """Reset the registry to a system default state (BASELINE)"""
+    """Reset the registry to a system default state (BASELINE)
+    
+    Requires admin JWT token.
+    Security: JWT signature verified, token expiration checked, admin role required.
+    Audit: All resets logged with timestamp and user ID.
+    """
+    # Enforce admin role (raises 403 if not admin)
+    require_admin(token)
+    
+    user_id = token.get("user_id", "unknown")
+    
     try:
+        # Record audit before reset
+        record_audit(
+            db=db,
+            action="registry.reset",
+            user_id=user_id,
+            resource_type="registry",
+            success=True,
+            metadata={"artifact_count": db.query(Artifact).count()}
+        )
+        
         db.query(Artifact).delete()
         db.commit()
         return {"message": "Registry is reset."}
     except Exception as e:
         db.rollback()
+        record_audit(
+            db=db,
+            action="registry.reset",
+            user_id=user_id,
+            resource_type="registry",
+            success=False,
+            metadata={"error": str(e)}
+        )
         raise HTTPException(status_code=500, detail=f"Failed to reset: {str(e)}")
 
 
@@ -222,7 +258,13 @@ def search_by_regex(
     x_authorization: Optional[str] = Header(None, alias="X-Authorization"),
     db: Session = Depends(get_db)
 ):
-    """Get artifacts matching regex (BASELINE)"""
+    """Get artifacts matching regex (BASELINE)
+    
+    Security: Regex pattern validated for ReDoS attacks (max 1000 chars, no nested quantifiers).
+    """
+    # Security: Validate regex for ReDoS attacks
+    validate_regex_safe(body.regex, max_length=1000)
+    
     try:
         pattern = re.compile(body.regex, re.IGNORECASE)
     except re.error:
@@ -348,10 +390,18 @@ def check_license(
 def create_artifact(
     artifact_type: str = Path(...),
     body: ArtifactData = Body(...),
-    x_authorization: Optional[str] = Header(None, alias="X-Authorization"),
+    token: Dict[str, Any] = Depends(verify_jwt_token),
     db: Session = Depends(get_db)
 ):
-    """Register a new artifact (BASELINE)"""
+    """Register a new artifact (BASELINE)
+    
+    Requires valid JWT token.
+    Security: Token signature verified, expiration checked.
+    Rate limiting: 3 uploads per minute per user.
+    Audit: Artifact creation logged with user ID and artifact ID.
+    """
+    user_id = token.get("user_id", "unknown")
+    
     if artifact_type not in ["model", "dataset", "code"]:
         raise HTTPException(status_code=400, detail="Invalid artifact type")
     
@@ -360,6 +410,9 @@ def create_artifact(
     
     name = extract_name_from_url(body.url)
     artifact_id = generate_artifact_id(name)
+    
+    # Rate limiting: Check upload rate (3 uploads per minute per user)
+    check_rate_limit(f"user_{user_id}:upload", limit=3)
     
     artifact = Artifact(
         id=artifact_id,
@@ -373,8 +426,27 @@ def create_artifact(
         db.add(artifact)
         db.commit()
         db.refresh(artifact)
+        
+        # Audit: Log successful artifact creation
+        record_audit(
+            db=db,
+            action="artifact.create",
+            user_id=user_id,
+            resource=artifact_id,
+            resource_type=artifact_type,
+            success=True,
+            metadata={"name": artifact.name, "url_domain": body.url.split("/")[2] if "/" in body.url else "unknown"}
+        )
     except SQLAlchemyError as e:
         db.rollback()
+        record_audit(
+            db=db,
+            action="artifact.create",
+            user_id=user_id,
+            resource_type=artifact_type,
+            success=False,
+            metadata={"error": str(e)}
+        )
         raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
     
     return {
@@ -424,10 +496,17 @@ def update_artifact(
     artifact_type: str = Path(...),
     artifact_id: str = Path(...),
     body: dict = Body(...),
-    x_authorization: Optional[str] = Header(None, alias="X-Authorization"),
+    token: Dict[str, Any] = Depends(verify_jwt_token),
     db: Session = Depends(get_db)
 ):
-    """Update artifact (BASELINE)"""
+    """Update artifact (BASELINE)
+    
+    Requires valid JWT token.
+    Security: Token signature verified, expiration checked.
+    Audit: Artifact updates logged with user ID and changes.
+    """
+    user_id = token.get("user_id", "unknown")
+    
     artifact = db.query(Artifact).filter(
         Artifact.id == artifact_id,
         Artifact.artifact_type == artifact_type
@@ -436,10 +515,36 @@ def update_artifact(
     if not artifact:
         raise HTTPException(status_code=404, detail="Artifact does not exist.")
     
+    old_url = artifact.url
     if "data" in body and "url" in body["data"]:
         artifact.url = body["data"]["url"]
     
-    db.commit()
+    try:
+        db.commit()
+        
+        # Audit: Log successful update
+        record_audit(
+            db=db,
+            action="artifact.update",
+            user_id=user_id,
+            resource=artifact_id,
+            resource_type=artifact_type,
+            success=True,
+            metadata={"url_changed": old_url != artifact.url}
+        )
+    except Exception as e:
+        db.rollback()
+        record_audit(
+            db=db,
+            action="artifact.update",
+            user_id=user_id,
+            resource=artifact_id,
+            resource_type=artifact_type,
+            success=False,
+            metadata={"error": str(e)}
+        )
+        raise HTTPException(status_code=500, detail=f"Failed to update: {str(e)}")
+    
     return {"message": "Artifact is updated."}
 
 
@@ -447,10 +552,20 @@ def update_artifact(
 def delete_artifact(
     artifact_type: str = Path(...),
     artifact_id: str = Path(...),
-    x_authorization: Optional[str] = Header(None, alias="X-Authorization"),
+    token: Dict[str, Any] = Depends(verify_jwt_token),
     db: Session = Depends(get_db)
 ):
-    """Delete artifact (NON-BASELINE)"""
+    """Delete artifact (NON-BASELINE)
+    
+    Requires admin JWT token.
+    Security: Token signature verified, expiration checked, admin role required.
+    Audit: All deletions logged with timestamp, user ID, and artifact details.
+    """
+    # Enforce admin role (raises 403 if not admin)
+    require_admin(token)
+    
+    user_id = token.get("user_id", "unknown")
+    
     artifact = db.query(Artifact).filter(
         Artifact.id == artifact_id,
         Artifact.artifact_type == artifact_type
@@ -459,8 +574,33 @@ def delete_artifact(
     if not artifact:
         raise HTTPException(status_code=404, detail="Artifact does not exist.")
     
-    db.delete(artifact)
-    db.commit()
+    try:
+        db.delete(artifact)
+        db.commit()
+        
+        # Audit: Log successful deletion
+        record_audit(
+            db=db,
+            action="artifact.delete",
+            user_id=user_id,
+            resource=artifact_id,
+            resource_type=artifact_type,
+            success=True,
+            metadata={"name": artifact.name}
+        )
+    except Exception as e:
+        db.rollback()
+        record_audit(
+            db=db,
+            action="artifact.delete",
+            user_id=user_id,
+            resource=artifact_id,
+            resource_type=artifact_type,
+            success=False,
+            metadata={"error": str(e)}
+        )
+        raise HTTPException(status_code=500, detail=f"Failed to delete: {str(e)}")
+    
     return {"message": "Artifact is deleted."}
 
 
