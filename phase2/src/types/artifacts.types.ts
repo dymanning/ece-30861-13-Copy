@@ -8,10 +8,43 @@
 
 export type ArtifactType = 'model' | 'dataset' | 'code';
 
+// ============================================
+// Rating Types (from Phase 1 metrics)
+// ============================================
+
+export interface SizeScore {
+  raspberry_pi: number;
+  jetson_nano: number;
+  desktop_pc?: number;
+  aws_server?: number;
+}
+
+export interface RatingMetrics {
+  quality: number;
+  size_score: SizeScore;
+  code_quality: number;
+  dataset_quality: number;
+  performance_claims: number;
+  bus_factor: number;
+  ramp_up_time: number;
+  dataset_and_code_score: number;
+}
+
+export interface CostMetrics {
+  inference_cents: number;
+  storage_cents: number;
+}
+
 export interface ArtifactMetadata {
+  id: number;
   name: string;
-  id: string;
   type: ArtifactType;
+  metadata?: Record<string, any>;
+  uri: string;
+  size: number;
+  rating: RatingMetrics;
+  cost: CostMetrics;
+  dependencies: string[];
 }
 
 export interface ArtifactData {
@@ -58,12 +91,17 @@ export interface PaginationResult<T> {
 // ============================================
 
 export interface ArtifactEntity {
-  id: string;
+  id: number;
   name: string;
   type: ArtifactType;
+  uri: string;
+  size: number;
   url: string;
   readme: string | null;
   metadata: Record<string, any>;
+  rating: RatingMetrics;
+  cost: CostMetrics;
+  dependencies: string[];
   created_at: Date;
   updated_at: Date;
 }
