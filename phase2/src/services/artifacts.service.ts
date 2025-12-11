@@ -16,38 +16,7 @@ import {
   handleDatabaseError,
 } from '../middleware/error.middleware';
 
-/**
- * Model rating shape for GET /artifact/model/{id}/rate
- */
-interface ModelRating {
-  name: string;
-  category: 'model';
-  net_score: number;
-  net_score_latency: number;
-  ramp_up_time: number;
-  ramp_up_time_latency: number;
-  bus_factor: number;
-  bus_factor_latency: number;
-  performance_claims: number;
-  performance_claims_latency: number;
-  license: number;
-  license_latency: number;
-  dataset_and_code_score: number;
-  dataset_and_code_score_latency: number;
-  dataset_quality: number;
-  dataset_quality_latency: number;
-  code_quality: number;
-  code_quality_latency: number;
-  reproducibility: number;
-  reproducibility_latency: number;
-  reviewedness: number;
-  reviewedness_latency: number;
-  tree_score: number;
-  tree_score_latency: number;
-  size_score: SizeScore;
-  size_score_latency: number;
-  ratings: RatingMetrics;
-}
+
 
 /**
  * Artifacts Service
@@ -236,8 +205,6 @@ export class ArtifactsService {
   }
 
   /**
-<<<<<<< HEAD
-=======
    * Create new artifact (spec: POST /artifact/{artifact_type})
    */
   async createArtifact(artifact_type: string, data: { url: string }): Promise<Artifact> {
@@ -249,26 +216,74 @@ export class ArtifactsService {
     const derivedName = urlParts[urlParts.length - 1] || 'unknown-artifact';
     const id = this.generateId();
     const type = artifact_type as 'model' | 'dataset' | 'code';
-    // Spec-related ingestion validation: compute quality and reject if < 0.5
-    // For model type only here; extend as needed
-    try {
-      const artifactPreview: Artifact = { metadata: { name: derivedName, id, type }, data: { url: data.url } };
-      // Lazy import to avoid cycles
-      const { computeQualityScore } = await import('../utils/metric.utils');
-      const quality = await computeQualityScore(artifactPreview);
-      if (quality < 0.5) {
-        throw new FailedDependencyError('Artifact is not registered due to the disqualified rating');
-      }
-    } catch (err) {
-      if (err instanceof BadRequestError || err instanceof FailedDependencyError) {
-        throw err;
-      }
-      // If metric evaluation fails, return 202 (deferred) per spec could be implemented in controller
-      // For now, propagate error as 500
-      handleDatabaseError(err);
+    
+    // Compute initial metrics for the artifact
+    const artifactPreview: Artifact = { metadata: { name: derivedName, id, type }, data: { url: data.url } };
+    const {
+      computeQualityScore,
+      computeDependencyScore,
+      computeCodeReviewScore,
+      computeSizeScoreFromBytes,
+    } = await import('../utils/metric.utils');
+
+    // Default size (will be updated when actual file is uploaded)
+    const DEFAULT_SIZE = 256 * 1024 * 1024; // 256MB default
+    
+    // Compute all metrics
+    const [qualityScore, dependencyScore, codeReviewScore] = await Promise.all([
+      computeQualityScore(artifactPreview),
+      computeDependencyScore(artifactPreview),
+      computeCodeReviewScore(artifactPreview),
+    ]);
+    
+    const sizeScores = computeSizeScoreFromBytes(DEFAULT_SIZE);
+    
+    // Build rating object
+    const rating = {
+      quality: qualityScore,
+      size_score: sizeScores.size_score,
+      code_quality: codeReviewScore,
+      dataset_quality: 0,
+      performance_claims: 0,
+      bus_factor: dependencyScore,
+      ramp_up_time: 0,
+      dataset_and_code_score: 0,
+    };
+
+    // Spec-related ingestion validation: reject if quality < 0.5
+    if (rating.quality < 0.5) {
+      throw new FailedDependencyError('Artifact is not registered due to the disqualified rating');
     }
-    const insertSql = `INSERT INTO artifacts (id, name, type, url, readme, metadata) VALUES ($1,$2,$3,$4,$5,$6)`;
-    const params = [id, derivedName, type, data.url, '', JSON.stringify({})];
+
+    // Generate S3-like URI placeholder (would be real S3 URI in production)
+    const uri = `s3://artifacts-bucket/${type}s/${id}/artifact.zip`;
+    
+    // Default cost calculation (placeholder until real pricing implemented)
+    const cost = {
+      inference_cents: parseFloat((DEFAULT_SIZE / (1024 * 1024 * 1024) * 0.001).toFixed(4)),
+      storage_cents: parseFloat((DEFAULT_SIZE / (1024 * 1024 * 1024) * 0.0001).toFixed(4)),
+    };
+
+    // Insert with all fields
+    const insertSql = `
+      INSERT INTO artifacts (
+        id, name, type, url, uri, size, readme, metadata, rating, cost, dependencies
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+    `;
+    const params = [
+      id,
+      derivedName,
+      type,
+      data.url,
+      uri,
+      DEFAULT_SIZE,
+      '',
+      JSON.stringify({}),
+      JSON.stringify(rating),
+      JSON.stringify(cost),
+      JSON.stringify([]),
+    ];
+    
     try {
       await db.query(insertSql, params);
     } catch (error: any) {
@@ -277,6 +292,7 @@ export class ArtifactsService {
       }
       handleDatabaseError(error);
     }
+    
     return {
       metadata: { name: derivedName, id, type },
       data: { url: data.url },
@@ -287,14 +303,28 @@ export class ArtifactsService {
    * Retrieve artifact (GET /artifacts/{artifact_type}/{id})
    */
   async getArtifact(artifact_type: string, id: string): Promise<Artifact> {
-    const sql = `SELECT id, name, type, url, readme, metadata FROM artifacts WHERE id = $1 AND type = $2`;
+    const sql = `
+      SELECT id, name, type, url, uri, size, readme, metadata, rating, cost, dependencies
+      FROM artifacts 
+      WHERE id = $1 AND type = $2
+    `;
     const result = await db.query<ArtifactEntity>(sql, [id, artifact_type]);
     if (result.rowCount === 0) {
       throw new NotFoundError('Artifact does not exist');
     }
     const row = result.rows[0];
     return {
-      metadata: { name: row.name, id: row.id, type: row.type },
+      metadata: { 
+        id: row.id, 
+        name: row.name, 
+        type: row.type,
+        metadata: row.metadata,
+        uri: row.uri,
+        size: row.size,
+        rating: row.rating,
+        cost: row.cost,
+        dependencies: row.dependencies,
+      },
       data: { url: row.url },
     };
   }
@@ -306,8 +336,62 @@ export class ArtifactsService {
     if (artifact.metadata.id !== id || artifact.metadata.type !== artifact_type) {
       throw new BadRequestError('Name/id/type mismatch');
     }
-    const sql = `UPDATE artifacts SET url = $1, updated_at = NOW() WHERE id = $2 AND type = $3`;
-    const result = await db.query(sql, [artifact.data.url, id, artifact_type]);
+
+    // Recompute metrics if URL changed
+    const {
+      computeQualityScore,
+      computeDependencyScore,
+      computeCodeReviewScore,
+      computeSizeScoreFromBytes,
+    } = await import('../utils/metric.utils');
+
+    // Get current size or use provided
+    const currentSize = artifact.metadata.size || 256 * 1024 * 1024;
+    
+    const [qualityScore, dependencyScore, codeReviewScore] = await Promise.all([
+      computeQualityScore(artifact),
+      computeDependencyScore(artifact),
+      computeCodeReviewScore(artifact),
+    ]);
+    
+    const sizeScores = computeSizeScoreFromBytes(currentSize);
+    
+    const rating = {
+      quality: qualityScore,
+      size_score: sizeScores.size_score,
+      code_quality: codeReviewScore,
+      dataset_quality: artifact.metadata.rating?.dataset_quality || 0,
+      performance_claims: artifact.metadata.rating?.performance_claims || 0,
+      bus_factor: dependencyScore,
+      ramp_up_time: artifact.metadata.rating?.ramp_up_time || 0,
+      dataset_and_code_score: artifact.metadata.rating?.dataset_and_code_score || 0,
+    };
+
+    const sql = `
+      UPDATE artifacts 
+      SET url = $1, 
+          uri = $2,
+          size = $3,
+          rating = $4,
+          cost = $5,
+          dependencies = $6,
+          metadata = $7,
+          updated_at = NOW() 
+      WHERE id = $8 AND type = $9
+    `;
+    
+    const result = await db.query(sql, [
+      artifact.data.url,
+      artifact.metadata.uri || `s3://artifacts-bucket/${artifact_type}s/${id}/artifact.zip`,
+      currentSize,
+      JSON.stringify(rating),
+      JSON.stringify(artifact.metadata.cost || { inference_cents: 0, storage_cents: 0 }),
+      JSON.stringify(artifact.metadata.dependencies || []),
+      JSON.stringify(artifact.metadata.metadata || {}),
+      id,
+      artifact_type,
+    ]);
+    
     if (result.rowCount === 0) {
       throw new NotFoundError('Artifact does not exist');
     }
@@ -325,9 +409,9 @@ export class ArtifactsService {
   }
 
   /**
-   * Get model rating (GET /artifact/model/{id}/rate) — stub implementation
+   * Get model rating (GET /artifact/model/{id}/rate)
    */
-  async getModelRating(id: string): Promise<ModelRating> {
+  async getModelRating(id: string): Promise<RatingMetrics> {
     const artifact = await this.getArtifact('model', id); // will throw 404 if missing
 
     // Wire up every metric that currently has an implementation (even if stubbed):
@@ -372,7 +456,6 @@ export class ArtifactsService {
     let performance_claims = 0;
     let code_quality = 0;
     let dataset_quality = 0;
-    let reviewedness = 0;
     if (config.features?.enableBedrock) {
       try {
         const { summarizePerformanceClaims, assessCodeQuality, assessDatasetQuality } = await import('./bedrock.service');
@@ -385,13 +468,8 @@ export class ArtifactsService {
         if (perf.status === 'fulfilled' && typeof perf.value.performance_claims === 'number') {
           performance_claims = Math.max(0, Math.min(1, (alpha * performance_claims) + ((1 - alpha) * perf.value.performance_claims)));
         }
-        if (code.status === 'fulfilled') {
-          if (typeof code.value.code_quality === 'number') {
-            code_quality = Math.max(0, Math.min(1, (alpha * code_quality) + ((1 - alpha) * code.value.code_quality)));
-          }
-          if (typeof code.value.reviewedness === 'number') {
-            reviewedness = Math.max(0, Math.min(1, (alpha * reviewedness) + ((1 - alpha) * code.value.reviewedness)));
-          }
+        if (code.status === 'fulfilled' && typeof code.value.code_quality === 'number') {
+          code_quality = Math.max(0, Math.min(1, (alpha * code_quality) + ((1 - alpha) * code.value.code_quality)));
         }
         if (data.status === 'fulfilled' && typeof data.value.dataset_quality === 'number') {
           dataset_quality = Math.max(0, Math.min(1, (alpha * dataset_quality) + ((1 - alpha) * data.value.dataset_quality)));
@@ -412,39 +490,9 @@ export class ArtifactsService {
     ratings.dataset_quality = ratings.dataset_quality || dataset_quality;
     ratings.performance_claims = ratings.performance_claims || performance_claims;
     ratings.dataset_and_code_score = ratings.dataset_and_code_score || ratings.dataset_quality;
-      } catch (e) {
-        // soft-fail; keep deterministic values
-      }
-    }
-    return {
-      name: artifact.metadata.name,
-      category: 'model',
-      net_score: ratings.quality,
-      net_score_latency: 0,
-      ramp_up_time: ratings.ramp_up_time,
-      ramp_up_time_latency: 0,
-      bus_factor: ratings.bus_factor,
-      bus_factor_latency: 0,
-      performance_claims: ratings.performance_claims,
-      performance_claims_latency: 0,
-      license: codeReviewScore, // placeholder connection until real license metric is wired
-      license_latency: 0,
-      dataset_and_code_score: ratings.dataset_and_code_score,
-      dataset_and_code_score_latency: 0,
-      dataset_quality: ratings.dataset_quality,
-      dataset_quality_latency: 0,
-      code_quality: ratings.code_quality,
-      code_quality_latency: 0,
-      reproducibility: dependencyScore,
-      reproducibility_latency: 0,
-      reviewedness,
-      reviewedness_latency: 0,
-      tree_score: 0,
-      tree_score_latency: 0,
-      size_score: ratings.size_score,
-      size_score_latency: sizeScores.size_score_latency,
-      ratings,
-    };
+    ratings.ramp_up_time = ratings.ramp_up_time || dependencyScore; // placeholder until real metric
+
+    return ratings;
   }
 
   /**
