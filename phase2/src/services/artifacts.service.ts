@@ -4,6 +4,8 @@ import {
   ArtifactQuery,
   ArtifactEntity,
   PaginationParams,
+  RatingMetrics,
+  SizeScore,
 } from '../types/artifacts.types';
 import { config } from '../config/config';
 import { logger } from '../utils/logger';
@@ -13,6 +15,39 @@ import {
   PayloadTooLargeError,
   handleDatabaseError,
 } from '../middleware/error.middleware';
+
+/**
+ * Model rating shape for GET /artifact/model/{id}/rate
+ */
+interface ModelRating {
+  name: string;
+  category: 'model';
+  net_score: number;
+  net_score_latency: number;
+  ramp_up_time: number;
+  ramp_up_time_latency: number;
+  bus_factor: number;
+  bus_factor_latency: number;
+  performance_claims: number;
+  performance_claims_latency: number;
+  license: number;
+  license_latency: number;
+  dataset_and_code_score: number;
+  dataset_and_code_score_latency: number;
+  dataset_quality: number;
+  dataset_quality_latency: number;
+  code_quality: number;
+  code_quality_latency: number;
+  reproducibility: number;
+  reproducibility_latency: number;
+  reviewedness: number;
+  reviewedness_latency: number;
+  tree_score: number;
+  tree_score_latency: number;
+  size_score: SizeScore;
+  size_score_latency: number;
+  ratings: RatingMetrics;
+}
 
 /**
  * Artifacts Service
@@ -294,12 +329,45 @@ export class ArtifactsService {
    */
   async getModelRating(id: string): Promise<ModelRating> {
     const artifact = await this.getArtifact('model', id); // will throw 404 if missing
-    // Derive a conservative default total size (bytes) if not available.
-    // This keeps scores deterministic while aligning with Phase 1 sizing logic.
-    // Default to 256MB to avoid zero scores for constrained devices.
+
+    // Wire up every metric that currently has an implementation (even if stubbed):
+    // - quality_score, dependency_score, code_review_score: metric.utils (random/stub)
+    // - size_score: metric.utils (deterministic from bytes)
+    const {
+      computeQualityScore,
+      computeDependencyScore,
+      computeCodeReviewScore,
+      computeSizeScoreFromBytes,
+    } = await import('../utils/metric.utils');
+
+    // Get size from DB if present; otherwise fall back to 256MB to avoid zero scores.
     const DEFAULT_TOTAL_SIZE_BYTES = 256 * 1024 * 1024;
-    const { computeSizeScoreFromBytes } = await import('../utils/metric.utils');
-    const sizeScores = computeSizeScoreFromBytes(DEFAULT_TOTAL_SIZE_BYTES);
+    const sizeResult = await db.query<{ size: number }>(
+      'SELECT size FROM artifacts WHERE id = $1 LIMIT 1',
+      [id]
+    );
+    const totalSizeBytes = sizeResult.rows?.[0]?.size ?? DEFAULT_TOTAL_SIZE_BYTES;
+
+    const [qualityScore, dependencyScore, codeReviewScore] = await Promise.all([
+      computeQualityScore(artifact),
+      computeDependencyScore(artifact),
+      computeCodeReviewScore(artifact),
+    ]);
+
+    const sizeScores = computeSizeScoreFromBytes(totalSizeBytes);
+
+    // Build ratings object using all currently available metrics (Phase 1 placeholders + local stubs)
+    const ratings: RatingMetrics = {
+      quality: qualityScore,
+      size_score: sizeScores.size_score,
+      code_quality: 0,
+      dataset_quality: 0,
+      performance_claims: 0,
+      bus_factor: dependencyScore,
+      ramp_up_time: 0,
+      dataset_and_code_score: 0,
+    };
+
     // Optionally enrich with Bedrock insights (blended conservatively)
     let performance_claims = 0;
     let code_quality = 0;
@@ -328,6 +396,22 @@ export class ArtifactsService {
         if (data.status === 'fulfilled' && typeof data.value.dataset_quality === 'number') {
           dataset_quality = Math.max(0, Math.min(1, (alpha * dataset_quality) + ((1 - alpha) * data.value.dataset_quality)));
         }
+
+        // Update ratings from Bedrock responses when present
+        ratings.performance_claims = performance_claims || ratings.performance_claims;
+        ratings.code_quality = code_quality || ratings.code_quality;
+        ratings.dataset_quality = dataset_quality || ratings.dataset_quality;
+        ratings.dataset_and_code_score = dataset_quality || ratings.dataset_and_code_score;
+      } catch (e) {
+        // soft-fail; keep deterministic values
+      }
+    }
+
+    // Merge deterministic values into ratings for fields still unset
+    ratings.code_quality = ratings.code_quality || code_quality || codeReviewScore;
+    ratings.dataset_quality = ratings.dataset_quality || dataset_quality;
+    ratings.performance_claims = ratings.performance_claims || performance_claims;
+    ratings.dataset_and_code_score = ratings.dataset_and_code_score || ratings.dataset_quality;
       } catch (e) {
         // soft-fail; keep deterministic values
       }
@@ -335,30 +419,31 @@ export class ArtifactsService {
     return {
       name: artifact.metadata.name,
       category: 'model',
-      net_score: 0,
+      net_score: ratings.quality,
       net_score_latency: 0,
-      ramp_up_time: 0,
+      ramp_up_time: ratings.ramp_up_time,
       ramp_up_time_latency: 0,
-      bus_factor: 0,
+      bus_factor: ratings.bus_factor,
       bus_factor_latency: 0,
-      performance_claims,
+      performance_claims: ratings.performance_claims,
       performance_claims_latency: 0,
-      license: 0,
+      license: codeReviewScore, // placeholder connection until real license metric is wired
       license_latency: 0,
-      dataset_and_code_score: dataset_quality,
+      dataset_and_code_score: ratings.dataset_and_code_score,
       dataset_and_code_score_latency: 0,
-      dataset_quality,
+      dataset_quality: ratings.dataset_quality,
       dataset_quality_latency: 0,
-      code_quality,
+      code_quality: ratings.code_quality,
       code_quality_latency: 0,
-      reproducibility: 0,
+      reproducibility: dependencyScore,
       reproducibility_latency: 0,
       reviewedness,
       reviewedness_latency: 0,
       tree_score: 0,
       tree_score_latency: 0,
-      size_score: sizeScores.size_score,
+      size_score: ratings.size_score,
       size_score_latency: sizeScores.size_score_latency,
+      ratings,
     };
   }
 
@@ -404,7 +489,6 @@ export class ArtifactsService {
   }
 
   /**
->>>>>>> 7e0ae15 (updated phase2 size metric calculation)
    * Get total artifact count (with safety limit)
    * Used for DoS prevention in enumerate endpoint
    * 
