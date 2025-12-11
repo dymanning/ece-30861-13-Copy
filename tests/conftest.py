@@ -19,7 +19,7 @@ def database_url():
     """Database connection URL"""
     return os.getenv(
         "DATABASE_URL",
-        "postgresql://postgres:postgres@localhost:5432/artifact_registry"
+        "sqlite:///./test_artifact_registry.db"
     )
 
 

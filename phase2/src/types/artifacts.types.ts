@@ -30,13 +30,34 @@ export interface RatingMetrics {
   dataset_and_code_score: number;
 }
 
+/* MetricScores interface removed. Use the version from metric.types.ts instead. */
+
 export interface CostMetrics {
   inference_cents: number;
   storage_cents: number;
 }
 
+export interface ArtifactCost {
+  [artifactId: string]: {
+    totalCost: number;
+    standaloneCost: number;
+  };
+}
+
+export interface ArtifactLineageGraph {
+  nodes: Array<{
+    id: string;
+    name: string;
+    type: ArtifactType;
+  }>;
+  edges: Array<{
+    from: string;
+    to: string;
+  }>;
+}
+
 export interface ArtifactMetadata {
-  id: number;
+  id: string;
   name: string;
   type: ArtifactType;
   metadata?: Record<string, any>;
@@ -52,7 +73,12 @@ export interface ArtifactData {
 }
 
 export interface Artifact {
-  metadata: ArtifactMetadata;
+  metadata: {
+    id: string;
+    name: string;
+    type: ArtifactType;
+    [key: string]: any;
+  };
   data: ArtifactData;
 }
 
@@ -91,7 +117,7 @@ export interface PaginationResult<T> {
 // ============================================
 
 export interface ArtifactEntity {
-  id: number;
+  id: string;
   name: string;
   type: ArtifactType;
   uri: string;
@@ -213,6 +239,9 @@ export interface AppConfig {
   auth: {
     enabled: boolean;
     jwtSecret: string;
+  };
+  features?: {
+    enableBedrock?: boolean;
   };
 }
 

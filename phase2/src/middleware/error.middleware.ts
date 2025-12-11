@@ -50,6 +50,18 @@ export class PayloadTooLargeError extends AppError {
   }
 }
 
+export class ConflictError extends AppError {
+  constructor(message: string = 'Conflict') {
+    super(message, 409);
+  }
+}
+
+export class FailedDependencyError extends AppError {
+  constructor(message: string = 'Failed Dependency') {
+    super(message, 424);
+  }
+}
+
 export class InternalServerError extends AppError {
   constructor(message: string = 'Internal Server Error') {
     super(message, 500);

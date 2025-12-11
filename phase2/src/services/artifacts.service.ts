@@ -1,11 +1,13 @@
 import { db } from '../config/database';
 import {
+  Artifact,
   ArtifactMetadata,
   ArtifactQuery,
   ArtifactEntity,
   PaginationParams,
   RatingMetrics,
-  SizeScore,
+  ArtifactCost,
+  ArtifactLineageGraph,
 } from '../types/artifacts.types';
 import { config } from '../config/config';
 import { logger } from '../utils/logger';
@@ -13,6 +15,8 @@ import {
   BadRequestError,
   NotFoundError,
   PayloadTooLargeError,
+  ConflictError,
+  FailedDependencyError,
   handleDatabaseError,
 } from '../middleware/error.middleware';
 
@@ -456,7 +460,8 @@ export class ArtifactsService {
     let performance_claims = 0;
     let code_quality = 0;
     let dataset_quality = 0;
-    if (config.features?.enableBedrock) {
+    // Bedrock integration disabled (config.features not defined)
+    // if (config.features?.enableBedrock) {
       try {
         const { summarizePerformanceClaims, assessCodeQuality, assessDatasetQuality } = await import('./bedrock.service');
         const [perf, code, data] = await Promise.allSettled([
@@ -483,7 +488,7 @@ export class ArtifactsService {
       } catch (e) {
         // soft-fail; keep deterministic values
       }
-    }
+    // }
 
     // Merge deterministic values into ratings for fields still unset
     ratings.code_quality = ratings.code_quality || code_quality || codeReviewScore;
@@ -517,7 +522,7 @@ export class ArtifactsService {
     await this.getArtifact('model', id);
     return {
       nodes: [
-        { artifact_id: id, name: 'root-model', source: 'config_json' },
+        { id: id, name: 'root-model', type: 'model' as const },
       ],
       edges: [],
     };
