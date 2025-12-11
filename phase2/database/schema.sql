@@ -20,7 +20,7 @@ CREATE TABLE artifacts (
     type VARCHAR(20) NOT NULL CHECK (type IN ('model', 'dataset', 'code')),
     
     -- S3/storage URI and size information
-    uri TEXT NOT NULL,
+    uri TEXT,
     size INTEGER DEFAULT 0,
     
     -- Source URL for artifact
