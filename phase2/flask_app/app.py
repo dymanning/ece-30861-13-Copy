@@ -200,7 +200,7 @@ def login():
             # match by email or username
             cur.execute(
                 "SELECT * FROM verifiedUsers WHERE username = ?",
-                (user)
+                (user,)
             )
             row = cur.fetchone()
             conn.close()
@@ -220,12 +220,15 @@ def login():
                     next_url = request.args.get("next") or url_for("dashboard")
                     return redirect(next_url)
                 else:
-                    flash("Login failed. Check credentials.", "danger")
+                    # Password mismatch
+                    flash("Invalid username or password.", "danger")
             else:
                 # no local user found
-                flash("Login failed. Check credentials.", "danger")
-        except sqlite3.Error:
-            flash("Unable to reach auth server.", "danger")
+                flash("Invalid username or password.", "danger")
+        except sqlite3.Error as e:
+            # Server-side database error
+            flash("A server error occurred. Please try again later.", "danger")
+            app.logger.error(f"Database error during login: {e}")
             return render_template("login.html")
     return render_template("login.html")
 
