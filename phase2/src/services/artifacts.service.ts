@@ -204,7 +204,7 @@ export class ArtifactsService {
 
       const result = await this.executeWithTimeout<ArtifactEntity>(sql, params);
 
-      // Return empty array if no matches (spec-compliant: 200 with empty array per spec)
+      // Return empty array if no matches (spec-compliant: 200 with empty array)
       if (result.rowCount === 0) {
         return [];
       }
