@@ -407,6 +407,7 @@ export class ArtifactsService {
           assessCodeQuality({ name: artifact.metadata.name }),
           assessDatasetQuality({ name: artifact.metadata.name }),
         ]);
+        const alpha = 0.7; // blend factor for higher-is-better metrics
         // Blend using min for lower-is-better metric to avoid inflating claims
         if (perf.status === 'fulfilled' && typeof perf.value.performance_claims === 'number') {
           performance_claims = Math.max(0, Math.min(1, Math.min(performance_claims, perf.value.performance_claims)));
