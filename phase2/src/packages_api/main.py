@@ -144,7 +144,7 @@ def _decode_jwt_no_verify(token: str) -> Dict[str, Any]:
 def get_user_from_header(x_authorization: Optional[str]) -> Optional[Dict[str, Any]]:
     """Parse JWT token if present, allow missing token for autograder compatibility."""
     if not x_authorization:
-        logger.warning("⚠️  Missing X-Authorization header (autograder mode)")
+        logger.info("Missing X-Authorization header (autograder mode)")
         return None
     
     try:
@@ -155,7 +155,7 @@ def get_user_from_header(x_authorization: Optional[str]) -> Optional[Dict[str, A
         logger.info(f"✓ Authenticated user: {claims.get('user_id')} role={claims.get('role')}")
         return claims
     except HTTPException:
-        logger.warning(f"⚠️  Invalid token provided (autograder mode)")
+        logger.info("Invalid token provided (autograder mode)")
         return None
     return claims
 
