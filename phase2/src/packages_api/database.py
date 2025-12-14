@@ -2,7 +2,7 @@ import os
 import sys
 from sqlalchemy import create_engine, Column, Integer, String, DateTime, Boolean, JSON
 from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import StaticPool
+from sqlalchemy.pool import StaticPool, NullPool
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.sql import func
 
@@ -26,13 +26,20 @@ if not DATABASE_URL:
         print("WARNING: Using default database credentials. Set DATABASE_URL or DB_USER/DB_PASSWORD environment variables.", file=sys.stderr)
 
 if DATABASE_URL.startswith("sqlite"):
-    # Use StaticPool + check_same_thread for SQLite in-memory testing so the
-    # same in-memory database is available across connections/threads.
-    engine = create_engine(
-        DATABASE_URL,
-        connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
-    )
+    # In-memory: share one connection (StaticPool) across threads
+    if ":memory:" in DATABASE_URL or DATABASE_URL.endswith("?mode=memory&cache=shared"):
+        engine = create_engine(
+            DATABASE_URL,
+            connect_args={"check_same_thread": False},
+            poolclass=StaticPool,
+        )
+    else:
+        # File-based SQLite: open new connections per session to avoid cross-thread reuse
+        engine = create_engine(
+            DATABASE_URL,
+            connect_args={"check_same_thread": False},
+            poolclass=NullPool,
+        )
 else:
     engine = create_engine(DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
