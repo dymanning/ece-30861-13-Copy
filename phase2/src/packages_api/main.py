@@ -2,7 +2,7 @@
 ECE 461 Phase 2 - Artifact Registry API
 Implements the OpenAPI spec endpoints for the autograder
 """
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Union
 import uuid
 import random
 import re
@@ -20,6 +20,7 @@ from fastapi import (
     Query,
     Path,
     Body,
+    Response,
 )
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
@@ -76,9 +77,11 @@ class ArtifactResponse(BaseModel):
 
 
 class ArtifactQuery(BaseModel):
-    name: Optional[str] = None
+    # OpenAPI spec requires `name` and optional `types` list.
+    # Keep `type` for backward compatibility with earlier local tests/tools.
+    name: str
+    types: Optional[Union[List[str], str]] = None
     type: Optional[str] = None
-    version: Optional[str] = None
 
 
 class ArtifactRegEx(BaseModel):
@@ -226,32 +229,81 @@ def reset_registry(
 
 @app.post("/artifacts")
 def list_artifacts(
-    queries: List[ArtifactQuery] = Body(...),
+    queries: List[ArtifactQuery],
+    response: Response,
     offset: Optional[str] = Query(None),
     x_authorization: Optional[str] = Header(None, alias="X-Authorization"),
     db: Session = Depends(get_db)
 ):
     """Get the artifacts from the registry (BASELINE)"""
-    results = []
+    if not isinstance(queries, list) or len(queries) == 0:
+        raise HTTPException(status_code=400, detail="Request body must be a non-empty array of ArtifactQuery objects")
+
+    try:
+        offset_value = int(offset) if offset is not None else 0
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail="Invalid offset: must be a non-negative integer")
+
+    if offset_value < 0:
+        raise HTTPException(status_code=400, detail="Invalid offset: must be a non-negative integer")
+
+    # DoS/deep pagination guard (align with spec's 413 behavior)
+    if offset_value > 100000:
+        raise HTTPException(status_code=413, detail="Offset too large. Please refine your query.")
+
+    allowed_types = {"model", "dataset", "code"}
+    results: List[Dict[str, Any]] = []
+    seen_ids = set()
     
     for query in queries:
         q = db.query(Artifact)
-        
-        if query.name and query.name != "*":
-            q = q.filter(Artifact.name == query.name)
-        
-        if query.type:
-            q = q.filter(Artifact.artifact_type == query.type)
-        
-        artifacts = q.all()
+
+        name = (query.name or "").strip()
+        if not name:
+            raise HTTPException(status_code=400, detail="Each query must include a non-empty name")
+
+        if name != "*":
+            q = q.filter(Artifact.name == name)
+
+        requested_types: Optional[List[str]] = None
+        if query.types is not None:
+            if isinstance(query.types, str):
+                requested_types = [query.types]
+            else:
+                requested_types = list(query.types)
+        elif query.type is not None:
+            requested_types = [query.type]
+
+        if requested_types:
+            normalized = [t.strip().lower() for t in requested_types if isinstance(t, str)]
+            if any(t not in allowed_types for t in normalized):
+                raise HTTPException(status_code=400, detail="Invalid artifact type in types filter")
+            q = q.filter(Artifact.artifact_type.in_(normalized))
+
+        artifacts = q.order_by(Artifact.name, Artifact.id).all()
         for art in artifacts:
-            results.append({
-                "name": art.name,
-                "id": art.id,
-                "type": art.artifact_type
-            })
-    
-    return results
+            if art.id in seen_ids:
+                continue
+            seen_ids.add(art.id)
+            results.append(
+                {
+                    "name": art.name,
+                    "id": art.id,
+                    "type": art.artifact_type,
+                }
+            )
+
+    # Simple pagination: return up to 1000 items per response
+    page_size = 1000
+    paged = results[offset_value : offset_value + page_size + 1]
+    has_more = len(paged) > page_size
+    paged = paged[:page_size]
+
+    if response is not None and has_more:
+        response.headers["offset"] = str(offset_value + page_size)
+
+    # Spec allows empty list for no matches
+    return paged
 
 
 # ============== SPECIFIC ARTIFACT ROUTES (MUST COME BEFORE GENERIC ROUTES) ==============
