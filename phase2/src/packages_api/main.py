@@ -7,8 +7,6 @@ import uuid
 import random
 import re
 import hashlib
-import logging
-import json
 
 from fastapi import (
     FastAPI,
@@ -19,7 +17,6 @@ from fastapi import (
     Query,
     Path,
     Body,
-    Request,
 )
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
@@ -31,62 +28,6 @@ from enum import Enum
 
 from .database import engine, get_db, Base
 from .audit_api import router as audit_router
-
-# Configure logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
-
-# ============== HELPER FUNCTIONS FOR DEBUGGING ==============
-
-async def log_request_details(request: Request, endpoint: str):
-    """Log raw request details for debugging"""
-    try:
-        body_bytes = await request.body()
-        headers_dict = dict(request.headers)
-        
-        logger.info(f"\n{'='*60}")
-        logger.info(f"ENDPOINT: {endpoint}")
-        logger.info(f"METHOD: {request.method}")
-        logger.info(f"HEADERS: {json.dumps(headers_dict, indent=2)}")
-        logger.info(f"RAW BODY: {body_bytes.decode('utf-8') if body_bytes else 'EMPTY'}")
-        
-        if body_bytes:
-            try:
-                body_json = json.loads(body_bytes)
-                logger.info(f"PARSED JSON: {json.dumps(body_json, indent=2)}")
-            except json.JSONDecodeError as e:
-                logger.error(f"JSON PARSE ERROR: {e}")
-        
-        logger.info(f"{'='*60}\n")
-    except Exception as e:
-        logger.error(f"Error logging request: {e}")
-
-
-def get_current_user_optional(
-    authorization: Optional[str] = Header(None, alias="X-Authorization")
-) -> Optional[Dict[str, Any]]:
-    """
-    Optional JWT verification for autograder compatibility.
-    Returns None if no token provided (allows autograder access).
-    Logs warning when bypassing authentication.
-    """
-    if not authorization:
-        logger.warning("⚠️  WARNING: Request missing X-Authorization header - allowing for autograder compatibility")
-        return None
-    
-    try:
-        # If token is provided, verify it
-        from .security import verify_jwt_token
-        token = verify_jwt_token(authorization)
-        logger.info(f"✓ Authenticated user: {token.get('user_id', 'unknown')}")
-        return token
-    except HTTPException as e:
-        logger.warning(f"⚠️  WARNING: Invalid token provided: {e.detail} - allowing for autograder compatibility")
-        return None
-    except Exception as e:
-        logger.error(f"❌ Token verification error: {e}")
-        return None
-
 
 # ============== MODELS ==============
 
@@ -207,27 +148,11 @@ def authenticate(body: AuthenticationRequest):
 
 
 @app.delete("/reset")
-async def reset_registry(
-    request: Request,
-    db: Session = Depends(get_db),
-    token: Optional[Dict[str, Any]] = Depends(get_current_user_optional)
+def reset_registry(
+    x_authorization: Optional[str] = Header(None, alias="X-Authorization"),
+    db: Session = Depends(get_db)
 ):
-    """Reset the registry to a system default state (BASELINE)
-    
-    Security: JWT signature verified, token expiration checked, admin role required.
-    Autograder mode: Allows unauthenticated access with warning log.
-    Audit: All resets logged with timestamp and user ID.
-    """
-    # Log request details for debugging
-    await log_request_details(request, "/reset")
-    
-    # Enforce admin role if token exists
-    if token:
-        require_admin(token)
-        user_id = token.get("user_id", "unknown")
-    else:
-        user_id = "autograder"
-    
+    """Reset the registry to a system default state (BASELINE)"""
     try:
         db.query(Artifact).delete()
         db.commit()
@@ -238,17 +163,13 @@ async def reset_registry(
 
 
 @app.post("/artifacts")
-async def list_artifacts(
-    request: Request,
+def list_artifacts(
     queries: List[ArtifactQuery] = Body(...),
     offset: Optional[str] = Query(None),
     x_authorization: Optional[str] = Header(None, alias="X-Authorization"),
     db: Session = Depends(get_db)
 ):
     """Get the artifacts from the registry (BASELINE)"""
-    # Log request details for debugging
-    await log_request_details(request, "/artifacts")
-    
     results = []
     
     for query in queries:
@@ -296,29 +217,12 @@ def get_artifact_by_name(
 
 
 @app.post("/artifact/byRegEx")
-async def search_by_regex(
-    request: Request,
+def search_by_regex(
     body: ArtifactRegEx = Body(...),
     x_authorization: Optional[str] = Header(None, alias="X-Authorization"),
     db: Session = Depends(get_db)
 ):
-    """Get artifacts matching regex (BASELINE)
-    
-    Security: Regex pattern validated for ReDoS attacks (max 1000 chars, no nested quantifiers).
-    """
-    # Log request details for debugging
-    await log_request_details(request, "/artifact/byRegEx")
-    
-    # Validate regex field exists
-    if not body.regex:
-        logger.error("❌ Missing 'regex' field in request body")
-        raise HTTPException(status_code=400, detail="Missing required field: regex")
-    
-    logger.info(f"Regex pattern received: {body.regex}")
-    
-    # Security: Validate regex for ReDoS attacks
-    validate_regex_safe(body.regex, max_length=1000)
-    
+    """Get artifacts matching regex (BASELINE)"""
     try:
         pattern = re.compile(body.regex, re.IGNORECASE)
     except re.error:
@@ -342,16 +246,12 @@ async def search_by_regex(
 
 
 @app.get("/artifact/model/{artifact_id}/rate")
-async def rate_model(
-    request: Request,
+def rate_model(
     artifact_id: str = Path(...),
     x_authorization: Optional[str] = Header(None, alias="X-Authorization"),
     db: Session = Depends(get_db)
 ):
     """Get ratings for this model artifact (BASELINE)"""
-    # Log request details for debugging
-    await log_request_details(request, f"/artifact/model/{artifact_id}/rate")
-    
     artifact = db.query(Artifact).filter(
         Artifact.id == artifact_id,
         Artifact.artifact_type == "model"
@@ -424,23 +324,13 @@ def get_artifact_lineage(
 
 
 @app.post("/artifact/model/{artifact_id}/license-check")
-async def check_license(
-    request: Request,
+def check_license(
     artifact_id: str = Path(...),
     body: SimpleLicenseCheckRequest = Body(...),
     x_authorization: Optional[str] = Header(None, alias="X-Authorization"),
     db: Session = Depends(get_db)
 ):
     """Assess license compatibility (BASELINE)"""
-    # Log request details for debugging
-    await log_request_details(request, f"/artifact/model/{artifact_id}/license-check")
-    
-    if not body.github_url:
-        logger.error("❌ Missing 'github_url' field in request body")
-        raise HTTPException(status_code=400, detail="Missing required field: github_url")
-    
-    logger.info(f"License check for: {body.github_url}")
-    
     artifact = db.query(Artifact).filter(
         Artifact.id == artifact_id,
         Artifact.artifact_type == "model"
@@ -455,43 +345,21 @@ async def check_license(
 # ============== GENERIC ARTIFACT ROUTES ==============
 
 @app.post("/artifact/{artifact_type}", status_code=status.HTTP_201_CREATED)
-async def create_artifact(
-    request: Request,
+def create_artifact(
     artifact_type: str = Path(...),
     body: ArtifactData = Body(...),
-    db: Session = Depends(get_db),
-    token: Optional[Dict[str, Any]] = Depends(get_current_user_optional)
+    x_authorization: Optional[str] = Header(None, alias="X-Authorization"),
+    db: Session = Depends(get_db)
 ):
-    """Register a new artifact (BASELINE)
-    
-    Security: Token signature verified if provided, expiration checked.
-    Autograder mode: Allows unauthenticated access with warning log.
-    Rate limiting: 3 uploads per minute per user (skipped for autograder).
-    Audit: Artifact creation logged with user ID and artifact ID.
-    """
-    # Log request details for debugging
-    await log_request_details(request, f"/artifact/{artifact_type}")
-    
-    user_id = token.get("user_id", "autograder") if token else "autograder"
-    
+    """Register a new artifact (BASELINE)"""
     if artifact_type not in ["model", "dataset", "code"]:
-        logger.error(f"❌ Invalid artifact type: {artifact_type}")
         raise HTTPException(status_code=400, detail="Invalid artifact type")
     
     if not body.url:
-        logger.error("❌ Missing 'url' field in request body")
         raise HTTPException(status_code=400, detail="URL is required")
-    
-    logger.info(f"Creating artifact: type={artifact_type}, url={body.url}")
     
     name = extract_name_from_url(body.url)
     artifact_id = generate_artifact_id(name)
-    
-    # Rate limiting: Check upload rate (3 uploads per minute per user) - skip for autograder
-    if token and user_id != "autograder":
-        check_rate_limit(f"user_{user_id}:upload", limit=3)
-    else:
-        logger.info("⚠️  Skipping rate limit check for autograder")
     
     artifact = Artifact(
         id=artifact_id,
@@ -552,25 +420,14 @@ def get_artifact(
 
 
 @app.put("/artifacts/{artifact_type}/{artifact_id}")
-async def update_artifact(
-    request: Request,
+def update_artifact(
     artifact_type: str = Path(...),
     artifact_id: str = Path(...),
     body: dict = Body(...),
-    db: Session = Depends(get_db),
-    token: Optional[Dict[str, Any]] = Depends(get_current_user_optional)
+    x_authorization: Optional[str] = Header(None, alias="X-Authorization"),
+    db: Session = Depends(get_db)
 ):
-    """Update artifact (BASELINE)
-    
-    Security: Token signature verified if provided, expiration checked.
-    Autograder mode: Allows unauthenticated access with warning log.
-    Audit: Artifact updates logged with user ID and changes.
-    """
-    # Log request details for debugging
-    await log_request_details(request, f"/artifacts/{artifact_type}/{artifact_id}")
-    
-    user_id = token.get("user_id", "autograder") if token else "autograder"
-    
+    """Update artifact (BASELINE)"""
     artifact = db.query(Artifact).filter(
         Artifact.id == artifact_id,
         Artifact.artifact_type == artifact_type
@@ -587,29 +444,13 @@ async def update_artifact(
 
 
 @app.delete("/artifacts/{artifact_type}/{artifact_id}")
-async def delete_artifact(
-    request: Request,
+def delete_artifact(
     artifact_type: str = Path(...),
     artifact_id: str = Path(...),
-    db: Session = Depends(get_db),
-    token: Optional[Dict[str, Any]] = Depends(get_current_user_optional)
+    x_authorization: Optional[str] = Header(None, alias="X-Authorization"),
+    db: Session = Depends(get_db)
 ):
-    """Delete artifact (NON-BASELINE)
-    
-    Security: Admin JWT token required if authentication provided.
-    Autograder mode: Allows unauthenticated access with warning log.
-    Audit: All deletions logged with timestamp, user ID, and artifact details.
-    """
-    # Log request details for debugging
-    await log_request_details(request, f"/artifacts/{artifact_type}/{artifact_id}")
-    
-    # Enforce admin role if token exists
-    if token:
-        require_admin(token)
-        user_id = token.get("user_id", "unknown")
-    else:
-        user_id = "autograder"
-    
+    """Delete artifact (NON-BASELINE)"""
     artifact = db.query(Artifact).filter(
         Artifact.id == artifact_id,
         Artifact.artifact_type == artifact_type
