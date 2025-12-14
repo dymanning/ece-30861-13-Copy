@@ -336,7 +336,9 @@ def search_by_regex(
 ):
     """Get artifacts matching regex (BASELINE)"""
     try:
-        pattern = re.compile(body.regex, re.IGNORECASE)
+        # Use re.search behavior (match anywhere) instead of re.match (match from start)
+        # The spec says "Search for an artifact using regular expression"
+        pattern = re.compile(body.regex)
     except re.error:
         raise HTTPException(status_code=400, detail="Invalid regex pattern")
     
@@ -344,7 +346,17 @@ def search_by_regex(
     matches = []
     
     for art in all_artifacts:
-        if pattern.search(art.name) or (art.readme and pattern.search(art.readme)):
+        # Check name
+        if pattern.search(art.name):
+            matches.append({
+                "name": art.name,
+                "id": art.id,
+                "type": art.artifact_type
+            })
+            continue
+            
+        # Check readme if it exists
+        if art.readme and pattern.search(art.readme):
             matches.append({
                 "name": art.name,
                 "id": art.id,
