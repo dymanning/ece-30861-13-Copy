@@ -10,6 +10,7 @@ import hashlib
 import logging
 import base64
 import json
+from urllib.parse import urlparse
 
 from fastapi import (
     FastAPI,
@@ -115,9 +116,46 @@ def extract_name_from_url(url: str) -> str:
     # Handle .git suffix
     if url.endswith(".git"):
         url = url[:-4]
+    
+    try:
+        # Ensure protocol for urlparse
+        parse_url = url if url.startswith("http") else f"https://{url}"
+        parsed = urlparse(parse_url)
+        hostname = parsed.hostname or ""
+        path = parsed.path
+        parts = [p for p in path.split("/") if p]
         
-    parts = url.split("/")
-    name = parts[-1] if parts else "unknown"
+        name = "unknown"
+        
+        if "github.com" in hostname:
+            # github.com/user/repo
+            if len(parts) >= 2:
+                name = parts[1]
+            elif len(parts) == 1:
+                name = parts[0]
+        elif "huggingface.co" in hostname:
+            # huggingface.co/user/model/tree/main
+            # huggingface.co/datasets/user/dataset/tree/main
+            
+            # Find where 'tree' or 'blob' starts and cut off
+            end_index = len(parts)
+            if "tree" in parts:
+                end_index = min(end_index, parts.index("tree"))
+            if "blob" in parts:
+                end_index = min(end_index, parts.index("blob"))
+                
+            relevant_parts = parts[:end_index]
+            if relevant_parts:
+                name = relevant_parts[-1]
+        else:
+            # Generic URL
+            if parts:
+                name = parts[-1]
+                
+    except Exception:
+        # Fallback
+        parts = url.split("/")
+        name = parts[-1] if parts else "unknown"
     
     # Remove common archive extensions if present
     for ext in [".zip", ".tar.gz", ".tgz", ".tar"]:

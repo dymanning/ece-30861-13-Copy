@@ -238,8 +238,47 @@ export class ArtifactsService {
       url = url.slice(0, -4);
     }
 
-    const urlParts = url.split('/').filter(Boolean);
-    let derivedName = urlParts[urlParts.length - 1] || 'unknown-artifact';
+    let derivedName = 'unknown-artifact';
+    try {
+      // Handle invalid URLs gracefully
+      const urlObj = new URL(url.startsWith('http') ? url : `https://${url}`);
+      const hostname = urlObj.hostname;
+      const pathname = urlObj.pathname;
+      const parts = pathname.split('/').filter(Boolean);
+
+      if (hostname.includes('github.com')) {
+        // github.com/user/repo
+        if (parts.length >= 2) {
+          derivedName = parts[1];
+        } else if (parts.length === 1) {
+          derivedName = parts[0];
+        }
+      } else if (hostname.includes('huggingface.co')) {
+        // huggingface.co/user/model/tree/main
+        const treeIndex = parts.indexOf('tree');
+        const blobIndex = parts.indexOf('blob');
+        let endIndex = parts.length;
+        
+        if (treeIndex !== -1) endIndex = Math.min(endIndex, treeIndex);
+        if (blobIndex !== -1) endIndex = Math.min(endIndex, blobIndex);
+        
+        const relevantParts = parts.slice(0, endIndex);
+        if (relevantParts.length > 0) {
+          derivedName = relevantParts[relevantParts.length - 1];
+        }
+      } else {
+        // Generic URL
+        if (parts.length > 0) {
+          derivedName = parts[parts.length - 1];
+        }
+      }
+    } catch (e) {
+      // Fallback
+      const parts = url.split('/').filter(Boolean);
+      if (parts.length > 0) {
+        derivedName = parts[parts.length - 1];
+      }
+    }
 
     // Remove common archive extensions
     const extensions = ['.zip', '.tar.gz', '.tgz', '.tar'];
