@@ -10,6 +10,31 @@ import { asyncHandler } from '../middleware/error.middleware';
 const router = Router();
 
 /**
+ * POST /artifact/:type
+ * Create/upload a new artifact
+ * 
+ * BASELINE requirement
+ * 
+ * Request:
+ * - Header: X-Authorization (required)
+ * - Path: type (model|dataset|code)
+ * - Body: { data: { url: string } }
+ * 
+ * Response:
+ * - 201: Artifact created
+ * - 400: Invalid request
+ * - 403: Authentication failed
+ * - 409: Artifact already exists
+ */
+router.post(
+  '/artifact/:type',
+  authenticate,
+  asyncHandler(async (req, res) => {
+    await artifactsController.createArtifact(req, res);
+  })
+);
+
+/**
  * POST /artifacts
  * Enumerate artifacts with pagination
  * 

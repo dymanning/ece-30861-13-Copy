@@ -475,14 +475,14 @@ export class ArtifactsService {
   }
 
   /**
-   * Get lineage graph (GET /artifact/model/{id}/lineage) — stub
+   * Get lineage graph (GET /artifact/model/{id}/lineage)
+   * Returns nodes and edges showing dependencies with actual artifact types
    */
   async getLineage(id: string): Promise<ArtifactLineageGraph> {
     // Fetch the artifact to get real metadata
     const artifact = await this.getArtifact('model', id);
     
     // Return lineage with the root artifact as a node
-    // Dependencies can be extracted from artifact.metadata.dependencies if available
     const nodes = [
       {
         id: artifact.metadata.id,
@@ -494,17 +494,55 @@ export class ArtifactsService {
     // Build edges from dependencies if they exist
     const edges: Array<{ from: string; to: string }> = [];
     if (artifact.metadata.dependencies && artifact.metadata.dependencies.length > 0) {
-      // Add dependencies as nodes and create edges
+      // Fetch actual artifact data for each dependency to get correct type
       for (const depId of artifact.metadata.dependencies) {
-        nodes.push({
-          id: depId,
-          name: depId,  // Simplified - use ID as name
-          type: 'model' as const,  // Assume dependency is a model
-        });
-        edges.push({
-          from: depId,
-          to: artifact.metadata.id,
-        });
+        try {
+          // Query database for the dependency artifact (any type)
+          const sql = `
+            SELECT id, name, type
+            FROM artifacts
+            WHERE id = $1
+            LIMIT 1
+          `;
+          const result = await db.query<{ id: string; name: string; type: string }>(sql, [depId]);
+          
+          if (result.rowCount > 0) {
+            const dep = result.rows[0];
+            nodes.push({
+              id: dep.id,
+              name: dep.name,
+              type: dep.type as 'model' | 'dataset' | 'code',
+            });
+            edges.push({
+              from: dep.id,
+              to: artifact.metadata.id,
+            });
+          } else {
+            // Dependency not found in database, add placeholder node
+            logger.warn('Dependency artifact not found', { depId, parentId: id });
+            nodes.push({
+              id: depId,
+              name: `${depId} (missing)`,
+              type: 'model' as const, // Fallback type
+            });
+            edges.push({
+              from: depId,
+              to: artifact.metadata.id,
+            });
+          }
+        } catch (error) {
+          logger.error('Error fetching dependency artifact', { depId, error });
+          // Add placeholder node on error
+          nodes.push({
+            id: depId,
+            name: `${depId} (error)`,
+            type: 'model' as const, // Fallback type
+          });
+          edges.push({
+            from: depId,
+            to: artifact.metadata.id,
+          });
+        }
       }
     }
     

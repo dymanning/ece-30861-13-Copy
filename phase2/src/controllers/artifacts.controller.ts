@@ -22,6 +22,51 @@ import { config } from '../config/config';
  */
 export class ArtifactsController {
   /**
+   * POST /artifact/:type
+   * Create/upload a new artifact
+   */
+  async createArtifact(req: Request, res: Response): Promise<void> {
+    const startTime = Date.now();
+
+    try {
+      // Parse path parameter
+      const { type } = req.params;
+
+      // Validate type
+      const validTypes = ['model', 'dataset', 'code'];
+      if (!type || !validTypes.includes(type)) {
+        throw new BadRequestError(
+          `Invalid artifact type: ${type}. Must be one of: ${validTypes.join(', ')}`
+        );
+      }
+
+      // Parse request body
+      const { data } = req.body;
+      if (!data || !data.url) {
+        throw new BadRequestError('Request body must include data.url');
+      }
+
+      // Create artifact
+      const artifact = await artifactsService.createArtifact(type, data);
+
+      // Log performance
+      const duration = Date.now() - startTime;
+      logger.info('Artifact created', {
+        type,
+        id: artifact.metadata.id,
+        name: artifact.metadata.name,
+        duration: `${duration}ms`,
+      });
+
+      // Send response (201 Created)
+      res.status(201).json(artifact);
+    } catch (error) {
+      logger.error('Error in createArtifact controller:', error);
+      throw error;
+    }
+  }
+
+  /**
    * POST /artifacts
    * Enumerate artifacts with pagination
    */
