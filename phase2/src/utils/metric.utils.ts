@@ -31,14 +31,14 @@ export async function validateModelSchema(artifact: Artifact): Promise<boolean> 
 
 // Size metric computation aligned with Phase 1 approach
 // Given a total size in bytes, compute per-device size suitability scores
-// and a latency placeholder. Devices: raspberry_pi, jetson_nano, desktop_pc, aws_server.
+// and a latency placeholder. Devices: raspberry_pi, jetson_nano (spec-compliant).
 export function computeSizeScoreFromBytes(totalSizeBytes: number): {
-  size_score: { raspberry_pi: number; jetson_nano: number; desktop_pc: number; aws_server: number };
+  size_score: { raspberry_pi: number; jetson_nano: number };
   size_score_latency: number;
 } {
   if (!totalSizeBytes || totalSizeBytes <= 0) {
     return {
-      size_score: { raspberry_pi: 0, jetson_nano: 0, desktop_pc: 0, aws_server: 0 },
+      size_score: { raspberry_pi: 0, jetson_nano: 0 },
       size_score_latency: 0,
     };
   }
@@ -46,8 +46,6 @@ export function computeSizeScoreFromBytes(totalSizeBytes: number): {
   const CAPACITY = {
     raspberry_pi: 1 * 1024 ** 3, // 1 GB
     jetson_nano: 4 * 1024 ** 3,  // 4 GB
-    desktop_pc: 16 * 1024 ** 3,  // 16 GB
-    aws_server: 32 * 1024 ** 3,  // 32 GB
   } as const;
 
   const scoreFor = (capacity: number) => {
@@ -58,8 +56,6 @@ export function computeSizeScoreFromBytes(totalSizeBytes: number): {
   const size_score = {
     raspberry_pi: parseFloat(scoreFor(CAPACITY.raspberry_pi).toFixed(3)),
     jetson_nano: parseFloat(scoreFor(CAPACITY.jetson_nano).toFixed(3)),
-    desktop_pc: parseFloat(scoreFor(CAPACITY.desktop_pc).toFixed(3)),
-    aws_server: parseFloat(scoreFor(CAPACITY.aws_server).toFixed(3)),
   };
 
   return { size_score, size_score_latency: 0 };

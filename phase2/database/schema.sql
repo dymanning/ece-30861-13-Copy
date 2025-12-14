@@ -37,9 +37,7 @@ CREATE TABLE artifacts (
         "quality": 0,
         "size_score": {
             "raspberry_pi": 0,
-            "jetson_nano": 0,
-            "desktop_pc": 0,
-            "aws_server": 0
+            "jetson_nano": 0
         },
         "code_quality": 0,
         "dataset_quality": 0,

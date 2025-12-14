@@ -15,8 +15,6 @@ export type ArtifactType = 'model' | 'dataset' | 'code';
 export interface SizeScore {
   raspberry_pi: number;
   jetson_nano: number;
-  desktop_pc?: number;
-  aws_server?: number;
 }
 
 export interface RatingMetrics {
@@ -73,12 +71,7 @@ export interface ArtifactData {
 }
 
 export interface Artifact {
-  metadata: {
-    id: string;
-    name: string;
-    type: ArtifactType;
-    [key: string]: any;
-  };
+  metadata: ArtifactMetadata;
   data: ArtifactData;
 }
 
