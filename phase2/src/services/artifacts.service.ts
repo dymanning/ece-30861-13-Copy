@@ -188,6 +188,9 @@ export class ArtifactsService {
    */
   async searchByName(name: string): Promise<ArtifactMetadata[]> {
     try {
+      // Ensure name is properly decoded (controller should pass decoded, but be defensive)
+      const decodedName = typeof name === 'string' ? name : String(name);
+      
       const sql = `
         SELECT id, name, type, uri, size, rating, cost, dependencies, metadata
         FROM artifacts
@@ -195,13 +198,13 @@ export class ArtifactsService {
         ORDER BY created_at DESC, id
       `;
 
-      const params = [name];
+      const params = [decodedName];
 
-      logger.debug('Name search query', { name });
+      logger.debug('Name search query', { name: decodedName });
 
       const result = await this.executeWithTimeout<ArtifactEntity>(sql, params);
 
-      // Return empty array if no matches (spec-compliant: 200 with empty array)
+      // Return empty array if no matches (spec-compliant: 200 with empty array per spec)
       if (result.rowCount === 0) {
         return [];
       }
@@ -294,8 +297,15 @@ export class ArtifactsService {
 
   /**
    * Retrieve artifact (GET /artifacts/{artifact_type}/{id})
+   * SECURITY: Enforces type isolation (wrong type → 404)
    */
   async getArtifact(artifact_type: string, id: string): Promise<Artifact> {
+    // Ensure type is valid
+    const validTypes = ['model', 'dataset', 'code'];
+    if (!validTypes.includes(artifact_type)) {
+      throw new BadRequestError(`Invalid artifact type: ${artifact_type}`);
+    }
+
     const sql = `
       SELECT id, name, type, url, uri, size, rating, cost, dependencies, metadata
       FROM artifacts 
@@ -306,7 +316,8 @@ export class ArtifactsService {
       throw new NotFoundError('Artifact does not exist');
     }
     const row = result.rows[0];
-    // Return full Artifact with complete ArtifactMetadata
+    
+    // Return full Artifact with complete ArtifactMetadata (all required fields)
     return {
       metadata: this.toArtifactMetadata(row),
       data: { url: row.url },
@@ -339,13 +350,22 @@ export class ArtifactsService {
 
   /**
    * Delete artifact (DELETE /artifacts/{artifact_type}/{id})
+   * Works for all types: model, dataset, code
    */
   async deleteArtifact(artifact_type: string, id: string): Promise<void> {
+    // Validate type for consistency
+    const validTypes = ['model', 'dataset', 'code'];
+    if (!validTypes.includes(artifact_type)) {
+      throw new BadRequestError(`Invalid artifact type: ${artifact_type}`);
+    }
+
     const sql = `DELETE FROM artifacts WHERE id = $1 AND type = $2`;
     const result = await db.query(sql, [id, artifact_type]);
     if (result.rowCount === 0) {
       throw new NotFoundError('Artifact does not exist');
     }
+    
+    logger.info('Artifact deleted', { id, type: artifact_type });
   }
 
   /**
@@ -455,13 +475,37 @@ export class ArtifactsService {
    * Get lineage graph (GET /artifact/model/{id}/lineage) — stub
    */
   async getLineage(id: string): Promise<ArtifactLineageGraph> {
-    await this.getArtifact('model', id);
-    return {
-      nodes: [
-        { id: id, name: 'root-model', type: 'model' as const },
-      ],
-      edges: [],
-    };
+    // Fetch the artifact to get real metadata
+    const artifact = await this.getArtifact('model', id);
+    
+    // Return lineage with the root artifact as a node
+    // Dependencies can be extracted from artifact.metadata.dependencies if available
+    const nodes = [
+      {
+        id: artifact.metadata.id,
+        name: artifact.metadata.name,
+        type: artifact.metadata.type,
+      },
+    ];
+    
+    // Build edges from dependencies if they exist
+    const edges: Array<{ from: string; to: string }> = [];
+    if (artifact.metadata.dependencies && artifact.metadata.dependencies.length > 0) {
+      // Add dependencies as nodes and create edges
+      for (const depId of artifact.metadata.dependencies) {
+        nodes.push({
+          id: depId,
+          name: depId,  // Simplified - use ID as name
+          type: 'model' as const,  // Assume dependency is a model
+        });
+        edges.push({
+          from: depId,
+          to: artifact.metadata.id,
+        });
+      }
+    }
+    
+    return { nodes, edges };
   }
 
   /**

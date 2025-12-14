@@ -205,6 +205,110 @@ export class ArtifactsController {
   }
 
   /**
+   * GET /artifacts/:type/:id
+   * Retrieve artifact by ID and type
+   */
+  async getArtifact(req: Request, res: Response): Promise<void> {
+    const startTime = Date.now();
+
+    try {
+      // Parse path parameters
+      const { type, id } = req.params;
+
+      // Validate parameters
+      if (!type || !id) {
+        throw new BadRequestError('type and id parameters are required');
+      }
+
+      // Execute artifact retrieval
+      const artifact = await artifactsService.getArtifact(type, id);
+
+      // Log performance
+      const duration = Date.now() - startTime;
+      logger.info('Artifact retrieved', {
+        type,
+        id,
+        duration: `${duration}ms`,
+      });
+
+      // Send response
+      res.status(200).json(artifact);
+    } catch (error) {
+      logger.error('Error in getArtifact controller:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * DELETE /artifacts/:type/:id
+   * Delete artifact by ID and type
+   */
+  async deleteArtifact(req: Request, res: Response): Promise<void> {
+    const startTime = Date.now();
+
+    try {
+      // Parse path parameters
+      const { type, id } = req.params;
+
+      // Validate parameters
+      if (!type || !id) {
+        throw new BadRequestError('type and id parameters are required');
+      }
+
+      // Execute artifact deletion
+      await artifactsService.deleteArtifact(type, id);
+
+      // Log performance
+      const duration = Date.now() - startTime;
+      logger.info('Artifact deleted', {
+        type,
+        id,
+        duration: `${duration}ms`,
+      });
+
+      // Send response (successful deletion)
+      res.status(200).json({ message: 'Artifact deleted successfully' });
+    } catch (error) {
+      logger.error('Error in deleteArtifact controller:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * GET /artifact/model/:id/lineage
+   * Get lineage graph for a model
+   */
+  async getLineage(req: Request, res: Response): Promise<void> {
+    const startTime = Date.now();
+
+    try {
+      // Parse path parameter
+      const { id } = req.params;
+
+      // Validate parameter
+      if (!id) {
+        throw new BadRequestError('id parameter is required');
+      }
+
+      // Execute lineage retrieval
+      const lineage = await artifactsService.getLineage(id);
+
+      // Log performance
+      const duration = Date.now() - startTime;
+      logger.info('Lineage retrieved', {
+        id,
+        duration: `${duration}ms`,
+      });
+
+      // Send response
+      res.status(200).json(lineage);
+    } catch (error) {
+      logger.error('Error in getLineage controller:', error);
+      throw error;
+    }
+  }
+
+  /**
    * GET /health
    * Health check endpoint
    */
