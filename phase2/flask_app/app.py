@@ -37,8 +37,24 @@ def get_db_path() -> str:
 
 def get_db_connection():
     path = get_db_path()
+    os.makedirs(os.path.dirname(path), exist_ok=True)
     conn = sqlite3.connect(path)
     conn.row_factory = sqlite3.Row
+    # Ensure schema is initialized
+    try:
+        cur = conn.cursor()
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS verifiedUsers (
+                userID INTEGER PRIMARY KEY AUTOINCREMENT,
+                email TEXT UNIQUE NOT NULL,
+                username TEXT UNIQUE NOT NULL,
+                password TEXT NOT NULL,
+                is_admin INTEGER DEFAULT 0
+            )
+        """)
+        conn.commit()
+    except Exception:
+        pass  # Table may already exist
     return conn
 
 
@@ -112,6 +128,59 @@ def role_required(role: str):
         return wrapper
 
     return decorator
+
+
+def ensure_default_admin_user():
+    """Create/ensure default admin user exists in local DB"""
+    DEFAULT_USERNAME = "ece30861defaultadminuser"
+    DEFAULT_PASSWORD = "correcthorsebatterystaple123(!__+@**(A;DROP TABLE packages"
+    
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        
+        # Check if default admin already exists
+        cur.execute("SELECT userID FROM verifiedUsers WHERE username = ?", (DEFAULT_USERNAME,))
+        if cur.fetchone():
+            conn.close()
+            return
+        
+        # Create default admin user
+        hashed = generate_password_hash(DEFAULT_PASSWORD)
+        cur.execute(
+            "SELECT MAX(userID) as mx FROM verifiedUsers"
+        )
+        row = cur.fetchone()
+        next_id = (row["mx"] or 0) + 1
+        
+        cur.execute(
+            "INSERT INTO verifiedUsers (userID, username, email, password, is_admin) VALUES (?, ?, ?, ?, ?)",
+            (next_id, DEFAULT_USERNAME, f"{DEFAULT_USERNAME}@system.local", hashed, 1)
+        )
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        print(f"Warning: Could not ensure default admin user: {e}")
+
+
+@app.route("/system/reset", methods=["POST"])
+def system_reset():
+    """Reset system to initial state (clears users, recreates default admin)"""
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        
+        # Clear users
+        cur.execute("DELETE FROM verifiedUsers")
+        conn.commit()
+        conn.close()
+        
+        # Recreate default admin
+        ensure_default_admin_user()
+        
+        return {"status": "ok", "message": "System reset successfully"}, 200
+    except Exception as e:
+        return {"status": "error", "message": str(e)}, 500
 
 
 @app.route("/")
@@ -234,5 +303,7 @@ def server_error(err):
 
 
 if __name__ == "__main__":
+    # Ensure default admin user exists on startup
+    ensure_default_admin_user()
     # For local development only. Use a real WSGI server in production.
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 3000)), debug=True)

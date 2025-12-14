@@ -223,13 +223,14 @@ export class ArtifactsService {
   /**
    * Create new artifact (spec: POST /artifact/{artifact_type})
    */
-  async createArtifact(artifact_type: string, data: { url: string }): Promise<Artifact> {
+  async createArtifact(artifact_type: string, data: { url: string; name?: string }): Promise<Artifact> {
     if (!data || !data.url) {
       throw new BadRequestError('artifact_data must include url');
     }
-    // Derive name from URL segment
+    // Prefer provided name; fallback to URL basename
+    const providedName = (data.name || '').trim();
     const urlParts = data.url.split('/').filter(Boolean);
-    const derivedName = urlParts[urlParts.length - 1] || 'unknown-artifact';
+    const derivedName = providedName || urlParts[urlParts.length - 1] || 'unknown-artifact';
     const id = this.generateId();
     const type = artifact_type as 'model' | 'dataset' | 'code';
     

@@ -40,14 +40,18 @@ export class ArtifactsController {
         );
       }
 
-      // Parse request body
-      const { data } = req.body;
+      // Parse request body: support both { url } and { data: { url } }
+      const payload = req.body || {};
+      const data = payload.data?.url ? payload.data : payload;
       if (!data || !data.url) {
-        throw new BadRequestError('Request body must include data.url');
+        throw new BadRequestError('Request body must include url');
       }
 
-      // Create artifact
-      const artifact = await artifactsService.createArtifact(type, data);
+      // Create artifact (name optional)
+      const artifact = await artifactsService.createArtifact(type, {
+        url: data.url,
+        name: data.name,
+      });
 
       // Log performance
       const duration = Date.now() - startTime;
