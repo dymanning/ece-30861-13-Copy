@@ -80,8 +80,8 @@ class ArtifactResponse(BaseModel):
 
 
 class ArtifactQuery(BaseModel):
-    name: Optional[str] = None
-    type: Optional[str] = None
+    name: str
+    types: Optional[List[str]] = None
     version: Optional[str] = None
 
 
@@ -290,8 +290,13 @@ def list_artifacts(
         if query.name and query.name != "*":
             q = q.filter(func.lower(Artifact.name) == func.lower(query.name))
         
-        if query.type:
-            q = q.filter(func.lower(Artifact.artifact_type) == func.lower(query.type))
+        if query.types:
+            # Filter by list of types (OR logic within the list)
+            # We use func.lower for case-insensitive comparison
+            # Since SQLAlchemy IN with func.lower is tricky, we can use or_
+            from sqlalchemy import or_
+            type_filters = [func.lower(Artifact.artifact_type) == func.lower(t) for t in query.types]
+            q = q.filter(or_(*type_filters))
         
         artifacts = q.all()
         for art in artifacts:
