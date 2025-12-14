@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 from .database import get_db
 from .schemas import AuditLogOut
 from .audit import query_audit_logs
-from ..logs_api import require_admin
+from logs_api import require_admin
 
 
 router = APIRouter(prefix="/audit", tags=["audit"])

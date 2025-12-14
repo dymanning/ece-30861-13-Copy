@@ -384,8 +384,9 @@ export class ArtifactsService {
       computeSizeScoreFromBytes,
     } = await import('../utils/metric.utils');
 
-    // Get size from DB if present; otherwise fall back to 256MB to avoid zero scores.
-    const DEFAULT_TOTAL_SIZE_BYTES = 256 * 1024 * 1024;
+    // Prefer actual artifact size if present; otherwise use a smaller default (64MB)
+    // to improve suitability scores on constrained devices.
+    const DEFAULT_TOTAL_SIZE_BYTES = 64 * 1024 * 1024;
     const sizeResult = await db.query<{ size: number }>(
       'SELECT size FROM artifacts WHERE id = $1 LIMIT 1',
       [id]
@@ -413,7 +414,8 @@ export class ArtifactsService {
     };
 
     // Optionally enrich with Bedrock insights (blended conservatively)
-    let performance_claims = 0;
+    // Lower-is-better: start conservatively low
+    let performance_claims = 0.1;
     let code_quality = 0;
     let dataset_quality = 0;
     // Bedrock integration disabled (config.features not defined)
@@ -425,9 +427,10 @@ export class ArtifactsService {
           assessCodeQuality({ name: artifact.metadata.name }),
           assessDatasetQuality({ name: artifact.metadata.name }),
         ]);
-        const alpha = 0.7; // favor deterministic (currently 0) but prepare for future calibration
+        const alpha = 0.7; // blend factor for higher-is-better metrics
+        // Blend using min for lower-is-better metric to avoid inflating claims
         if (perf.status === 'fulfilled' && typeof perf.value.performance_claims === 'number') {
-          performance_claims = Math.max(0, Math.min(1, (alpha * performance_claims) + ((1 - alpha) * perf.value.performance_claims)));
+          performance_claims = Math.max(0, Math.min(1, Math.min(performance_claims, perf.value.performance_claims)));
         }
         if (code.status === 'fulfilled' && typeof code.value.code_quality === 'number') {
           code_quality = Math.max(0, Math.min(1, (alpha * code_quality) + ((1 - alpha) * code.value.code_quality)));
@@ -688,6 +691,9 @@ export class ArtifactsService {
       rating,
       cost,
       dependencies,
+      metadata: typeof entity.metadata === 'string' && entity.metadata
+        ? (() => { try { return JSON.parse(entity.metadata); } catch { return entity.metadata; } })()
+        : entity.metadata,
     };
   }
 

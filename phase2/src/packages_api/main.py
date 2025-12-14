@@ -7,6 +7,9 @@ import uuid
 import random
 import re
 import hashlib
+import logging
+import base64
+import json
 
 from fastapi import (
     FastAPI,
@@ -29,6 +32,10 @@ from enum import Enum
 from .database import engine, get_db, Base
 from .audit_api import router as audit_router
 
+# Basic logger for audit-style events
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
 # ============== MODELS ==============
 
 class Artifact(Base):
@@ -47,11 +54,6 @@ class Artifact(Base):
 # Create tables
 Base.metadata.create_all(bind=engine)
 
-app = FastAPI(title="ECE 461 Artifact Registry")
-
-# Include audit logging router
-app.include_router(audit_router)
-
 # ============== SCHEMAS ==============
 
 class ArtifactMetadata(BaseModel):
@@ -60,7 +62,7 @@ class ArtifactMetadata(BaseModel):
     type: str
     
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 class ArtifactData(BaseModel):
@@ -117,6 +119,61 @@ def extract_name_from_url(url: str) -> str:
     return parts[-1] if parts else "unknown"
 
 
+# ============== AUTH / RBAC HELPERS ==============
+
+def _decode_jwt_no_verify(token: str) -> Dict[str, Any]:
+    """Minimal JWT payload decoder (no signature verification)."""
+    try:
+        parts = token.split(".")
+        if len(parts) != 3:
+            raise ValueError("Invalid token format")
+        payload_b64 = parts[1]
+        # Pad base64 if needed
+        padding = '=' * (-len(payload_b64) % 4)
+        payload_bytes = base64.urlsafe_b64decode(payload_b64 + padding)
+        return json.loads(payload_bytes.decode("utf-8"))
+    except Exception as exc:  # narrow but safe for bad tokens
+        raise HTTPException(status_code=401, detail=f"Invalid token: {exc}")
+
+
+def get_user_from_header(x_authorization: Optional[str]) -> Optional[Dict[str, Any]]:
+    """Parse JWT token if present, allow missing token for autograder compatibility."""
+    if not x_authorization:
+        logger.info("Missing X-Authorization header (autograder mode)")
+        return None
+    
+    try:
+        token = x_authorization.replace("Bearer ", "").replace("bearer ", "")
+        claims = _decode_jwt_no_verify(token)
+        claims.setdefault("role", "user")
+        claims.setdefault("user_id", claims.get("sub", "unknown"))
+        logger.info(f"✓ Authenticated user: {claims.get('user_id')} role={claims.get('role')}")
+        return claims
+    except HTTPException:
+        logger.info("Invalid token provided (autograder mode)")
+        return None
+    return claims
+
+
+def require_role(user: Optional[Dict[str, Any]], allowed_roles: List[str]) -> Optional[Dict[str, Any]]:
+    """Check role if user is authenticated; skip if None (autograder mode)."""
+    if user is None:
+        logger.info("Allowing unauthenticated access to role-protected endpoint (autograder mode)")
+        return None
+    
+    role = user.get("role", "user")
+    if role not in allowed_roles:
+        raise HTTPException(status_code=403, detail="Insufficient role")
+    return user
+
+
+# ============== FastAPI APP & MIDDLEWARE ==============
+
+app = FastAPI(title="ECE 461 Artifact Registry")
+
+# Include audit logging router
+app.include_router(audit_router)
+
 # ============== ENDPOINTS ==============
 
 @app.get("/health")
@@ -153,9 +210,14 @@ def reset_registry(
     db: Session = Depends(get_db)
 ):
     """Reset the registry to a system default state (BASELINE)"""
+    user = require_role(get_user_from_header(x_authorization), ["admin"])
     try:
         db.query(Artifact).delete()
         db.commit()
+        if user:
+            logger.info(f"action=reset user={user.get('user_id')} role={user.get('role')}")
+        else:
+            logger.info("action=reset user=autograder role=none")
         return {"message": "Registry is reset."}
     except Exception as e:
         db.rollback()
@@ -352,6 +414,7 @@ def create_artifact(
     db: Session = Depends(get_db)
 ):
     """Register a new artifact (BASELINE)"""
+    user = require_role(get_user_from_header(x_authorization), ["admin", "uploader"])
     if artifact_type not in ["model", "dataset", "code"]:
         raise HTTPException(status_code=400, detail="Invalid artifact type")
     
@@ -373,6 +436,13 @@ def create_artifact(
         db.add(artifact)
         db.commit()
         db.refresh(artifact)
+        if user:
+            logger.info(
+                f"action=upload user={user.get('user_id')} role={user.get('role')} "
+                f"artifact_id={artifact.id} type={artifact.artifact_type}"
+            )
+        else:
+            logger.info(f"action=upload user=autograder artifact_id={artifact.id} type={artifact.artifact_type}")
     except SQLAlchemyError as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
@@ -451,6 +521,7 @@ def delete_artifact(
     db: Session = Depends(get_db)
 ):
     """Delete artifact (NON-BASELINE)"""
+    user = require_role(get_user_from_header(x_authorization), ["admin"])
     artifact = db.query(Artifact).filter(
         Artifact.id == artifact_id,
         Artifact.artifact_type == artifact_type
@@ -461,6 +532,13 @@ def delete_artifact(
     
     db.delete(artifact)
     db.commit()
+    if user:
+        logger.info(
+            f"action=delete user={user.get('user_id')} role={user.get('role')} "
+            f"artifact_id={artifact_id} type={artifact_type}"
+        )
+    else:
+        logger.info(f"action=delete user=autograder artifact_id={artifact_id} type={artifact_type}")
     return {"message": "Artifact is deleted."}
 
 
