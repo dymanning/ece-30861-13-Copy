@@ -8,10 +8,62 @@
 
 export type ArtifactType = 'model' | 'dataset' | 'code';
 
+// ============================================
+// Rating Types (from Phase 1 metrics)
+// ============================================
+
+export interface SizeScore {
+  raspberry_pi: number;
+  jetson_nano: number;
+}
+
+export interface RatingMetrics {
+  quality: number;
+  size_score: SizeScore;
+  code_quality: number;
+  dataset_quality: number;
+  performance_claims: number;
+  bus_factor: number;
+  ramp_up_time: number;
+  dataset_and_code_score: number;
+}
+
+/* MetricScores interface removed. Use the version from metric.types.ts instead. */
+
+export interface CostMetrics {
+  inference_cents: number;
+  storage_cents: number;
+}
+
+export interface ArtifactCost {
+  [artifactId: string]: {
+    totalCost: number;
+    standaloneCost: number;
+  };
+}
+
+export interface ArtifactLineageGraph {
+  nodes: Array<{
+    id: string;
+    name: string;
+    type: ArtifactType;
+  }>;
+  edges: Array<{
+    from: string;
+    to: string;
+  }>;
+}
+
 export interface ArtifactMetadata {
-  name: string;
   id: string;
+  name: string;
   type: ArtifactType;
+  metadata?: Record<string, any>;
+  uri: string;
+  size: number;
+  rating: RatingMetrics;
+  cost: CostMetrics;
+  dependencies: string[];
 }
 
 export interface ArtifactData {
@@ -61,9 +113,14 @@ export interface ArtifactEntity {
   id: string;
   name: string;
   type: ArtifactType;
+  uri: string;
+  size: number;
   url: string;
   readme: string | null;
   metadata: Record<string, any>;
+  rating: RatingMetrics;
+  cost: CostMetrics;
+  dependencies: string[];
   created_at: Date;
   updated_at: Date;
 }
@@ -175,6 +232,9 @@ export interface AppConfig {
   auth: {
     enabled: boolean;
     jwtSecret: string;
+  };
+  features?: {
+    enableBedrock?: boolean;
   };
 }
 

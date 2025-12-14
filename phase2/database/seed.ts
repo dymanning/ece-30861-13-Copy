@@ -254,6 +254,62 @@ Llama 2 Community License`,
 ];
 
 /**
+ * Compute metrics for an artifact
+ */
+function computeMetrics(artifact: any) {
+  // Compute quality scores
+  const quality = Math.random() * 0.5 + 0.5; // 0.5-1.0
+  const busFactor = Math.floor(Math.random() * 10) + 1; // 1-10
+  const codeQuality = Math.random() * 0.3 + 0.7; // 0.7-1.0
+  const rampUpTime = Math.random() * 0.5; // 0-0.5
+  const datasetQuality = Math.random() * 0.4 + 0.6; // 0.6-1.0
+  const performanceClaims = Math.random() * 0.3 + 0.7; // 0.7-1.0
+  const datasetAndCode = Math.random() * 0.4 + 0.6; // 0.6-1.0
+
+  // Compute size score
+  const sizeInBytes = 256 * 1024 * 1024; // 256MB
+  const sizeScore = {
+    size: sizeInBytes,
+    score: sizeInBytes <= 100 * 1024 * 1024 ? 1.0 : 0.5
+  };
+
+  // Generate URI
+  const uri = `s3://artifacts-bucket/${artifact.type}s/${artifact.id}/artifact.zip`;
+
+  // Compute cost
+  const storageCostPerGB = 0.023;
+  const storageCost = (sizeInBytes / (1024 * 1024 * 1024)) * storageCostPerGB;
+  const cost = {
+    storage: parseFloat(storageCost.toFixed(4)),
+    retrieval: 0.0004,
+    total: parseFloat((storageCost + 0.0004).toFixed(4))
+  };
+
+  // Extract dependencies (placeholder - would parse from actual files)
+  const dependencies: string[] = [];
+
+  // Build rating object
+  const rating = {
+    quality,
+    bus_factor: busFactor,
+    code_quality: codeQuality,
+    ramp_up_time: rampUpTime,
+    dataset_quality: datasetQuality,
+    performance_claims: performanceClaims,
+    dataset_and_code_score: datasetAndCode,
+    size_score: sizeScore
+  };
+
+  return {
+    uri,
+    size: sizeInBytes,
+    rating,
+    cost,
+    dependencies
+  };
+}
+
+/**
  * Insert sample data into database
  */
 async function insertSampleData() {
@@ -268,14 +324,21 @@ async function insertSampleData() {
 
     // Insert each artifact
     for (const artifact of sampleArtifacts) {
+      const metrics = computeMetrics(artifact);
+
       const sql = `
-        INSERT INTO artifacts (id, name, type, url, readme)
-        VALUES ($1, $2, $3, $4, $5)
+        INSERT INTO artifacts (id, name, type, url, readme, uri, size, rating, cost, dependencies)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
         ON CONFLICT (id) DO UPDATE
         SET name = EXCLUDED.name,
             type = EXCLUDED.type,
             url = EXCLUDED.url,
             readme = EXCLUDED.readme,
+            uri = EXCLUDED.uri,
+            size = EXCLUDED.size,
+            rating = EXCLUDED.rating,
+            cost = EXCLUDED.cost,
+            dependencies = EXCLUDED.dependencies,
             updated_at = NOW()
       `;
 
@@ -285,10 +348,15 @@ async function insertSampleData() {
         artifact.type,
         artifact.url,
         artifact.readme,
+        metrics.uri,
+        metrics.size,
+        JSON.stringify(metrics.rating),
+        JSON.stringify(metrics.cost),
+        metrics.dependencies,
       ];
 
       await db.query(sql, params);
-      logger.info(`Inserted: ${artifact.name} (${artifact.type})`);
+      logger.info(`Inserted: ${artifact.name} (${artifact.type}) with metrics`);
     }
 
     // Verify insertion

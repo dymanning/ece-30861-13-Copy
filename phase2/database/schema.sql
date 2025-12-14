@@ -12,12 +12,16 @@ DROP TABLE IF EXISTS users CASCADE;
 -- Main Artifacts Table
 -- ============================================
 CREATE TABLE artifacts (
-    -- Primary identifier (OpenAPI: ArtifactID pattern '^[a-zA-Z0-9\-]+$')
-    id VARCHAR(50) PRIMARY KEY,
+    -- Primary identifier
+    id SERIAL PRIMARY KEY,
     
     -- Artifact metadata
     name VARCHAR(255) NOT NULL,
     type VARCHAR(20) NOT NULL CHECK (type IN ('model', 'dataset', 'code')),
+    
+    -- S3/storage URI and size information
+    uri TEXT,
+    size INTEGER DEFAULT 0,
     
     -- Source URL for artifact
     url TEXT NOT NULL,
@@ -25,8 +29,32 @@ CREATE TABLE artifacts (
     -- README content for regex search (CRITICAL for search functionality)
     readme TEXT,
     
-    -- Flexible storage for ratings, lineage, etc.
+    -- Flexible storage for additional metadata
     metadata JSONB DEFAULT '{}',
+    
+    -- Phase 1 Metrics - Quality Ratings
+    rating JSONB DEFAULT '{
+        "quality": 0,
+        "size_score": {
+            "raspberry_pi": 0,
+            "jetson_nano": 0
+        },
+        "code_quality": 0,
+        "dataset_quality": 0,
+        "performance_claims": 0,
+        "bus_factor": 0,
+        "ramp_up_time": 0,
+        "dataset_and_code_score": 0
+    }',
+    
+    -- Cost metrics (in cents)
+    cost JSONB DEFAULT '{
+        "inference_cents": 0,
+        "storage_cents": 0
+    }',
+    
+    -- Dependencies/requirements
+    dependencies TEXT[] DEFAULT ARRAY[]::TEXT[],
     
     -- Security monitoring fields
     is_sensitive BOOLEAN DEFAULT FALSE,

@@ -29,16 +29,8 @@ from sqlalchemy import Column, Integer, String, DateTime, JSON, Text
 from sqlalchemy.sql import func
 from enum import Enum
 
-from .database import engine, get_db, Base, AuditLog
+from .database import engine, get_db, Base
 from .audit_api import router as audit_router
-from .audit import record_audit
-from .security import (
-    verify_jwt_token,
-    require_admin,
-    validate_regex_safe,
-    validate_file_size,
-    check_rate_limit,
-)
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -237,29 +229,11 @@ async def reset_registry(
         user_id = "autograder"
     
     try:
-        # Record audit before reset
-        record_audit(
-            db=db,
-            action="registry.reset",
-            user_id=user_id,
-            resource_type="registry",
-            success=True,
-            metadata={"artifact_count": db.query(Artifact).count()}
-        )
-        
         db.query(Artifact).delete()
         db.commit()
         return {"message": "Registry is reset."}
     except Exception as e:
         db.rollback()
-        record_audit(
-            db=db,
-            action="registry.reset",
-            user_id=user_id,
-            resource_type="registry",
-            success=False,
-            metadata={"error": str(e)}
-        )
         raise HTTPException(status_code=500, detail=f"Failed to reset: {str(e)}")
 
 
@@ -531,27 +505,8 @@ async def create_artifact(
         db.add(artifact)
         db.commit()
         db.refresh(artifact)
-        
-        # Audit: Log successful artifact creation
-        record_audit(
-            db=db,
-            action="artifact.create",
-            user_id=user_id,
-            resource=artifact_id,
-            resource_type=artifact_type,
-            success=True,
-            metadata={"name": artifact.name, "url_domain": body.url.split("/")[2] if "/" in body.url else "unknown"}
-        )
     except SQLAlchemyError as e:
         db.rollback()
-        record_audit(
-            db=db,
-            action="artifact.create",
-            user_id=user_id,
-            resource_type=artifact_type,
-            success=False,
-            metadata={"error": str(e)}
-        )
         raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
     
     return {
@@ -624,36 +579,10 @@ async def update_artifact(
     if not artifact:
         raise HTTPException(status_code=404, detail="Artifact does not exist.")
     
-    old_url = artifact.url
     if "data" in body and "url" in body["data"]:
         artifact.url = body["data"]["url"]
     
-    try:
-        db.commit()
-        
-        # Audit: Log successful update
-        record_audit(
-            db=db,
-            action="artifact.update",
-            user_id=user_id,
-            resource=artifact_id,
-            resource_type=artifact_type,
-            success=True,
-            metadata={"url_changed": old_url != artifact.url}
-        )
-    except Exception as e:
-        db.rollback()
-        record_audit(
-            db=db,
-            action="artifact.update",
-            user_id=user_id,
-            resource=artifact_id,
-            resource_type=artifact_type,
-            success=False,
-            metadata={"error": str(e)}
-        )
-        raise HTTPException(status_code=500, detail=f"Failed to update: {str(e)}")
-    
+    db.commit()
     return {"message": "Artifact is updated."}
 
 
@@ -689,33 +618,8 @@ async def delete_artifact(
     if not artifact:
         raise HTTPException(status_code=404, detail="Artifact does not exist.")
     
-    try:
-        db.delete(artifact)
-        db.commit()
-        
-        # Audit: Log successful deletion
-        record_audit(
-            db=db,
-            action="artifact.delete",
-            user_id=user_id,
-            resource=artifact_id,
-            resource_type=artifact_type,
-            success=True,
-            metadata={"name": artifact.name}
-        )
-    except Exception as e:
-        db.rollback()
-        record_audit(
-            db=db,
-            action="artifact.delete",
-            user_id=user_id,
-            resource=artifact_id,
-            resource_type=artifact_type,
-            success=False,
-            metadata={"error": str(e)}
-        )
-        raise HTTPException(status_code=500, detail=f"Failed to delete: {str(e)}")
-    
+    db.delete(artifact)
+    db.commit()
     return {"message": "Artifact is deleted."}
 
 
