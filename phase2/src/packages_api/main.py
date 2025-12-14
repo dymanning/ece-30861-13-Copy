@@ -29,7 +29,7 @@ from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel, Field
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
-from sqlalchemy import Column, Integer, String, DateTime, JSON, Text
+from sqlalchemy import Column, Integer, String, DateTime, JSON, Text, or_
 from sqlalchemy.sql import func
 from enum import Enum
 
@@ -279,10 +279,14 @@ def list_artifacts(
     queries: List[ArtifactQuery] = Body(...),
     offset: Optional[str] = Query(None),
     x_authorization: Optional[str] = Header(None, alias="X-Authorization"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    response: Response = None
 ):
     """Get the artifacts from the registry (BASELINE)"""
     results = []
+    
+    # Limit total results to prevent DoS
+    MAX_RESULTS = 1000
     
     for query in queries:
         q = db.query(Artifact)
@@ -292,21 +296,36 @@ def list_artifacts(
         
         if query.types:
             # Filter by list of types (OR logic within the list)
-            # We use func.lower for case-insensitive comparison
-            # Since SQLAlchemy IN with func.lower is tricky, we can use or_
-            from sqlalchemy import or_
             type_filters = [func.lower(Artifact.artifact_type) == func.lower(t) for t in query.types]
             q = q.filter(or_(*type_filters))
         
-        artifacts = q.all()
+        # Limit per query to avoid explosion
+        artifacts = q.limit(MAX_RESULTS).all()
         for art in artifacts:
             results.append({
                 "name": art.name,
                 "id": art.id,
                 "type": art.artifact_type
             })
+            
+            if len(results) >= MAX_RESULTS:
+                break
+        
+        if len(results) >= MAX_RESULTS:
+            break
     
-    return results
+    # Handle pagination
+    page_size = 10
+    current_offset = int(offset) if offset and offset.isdigit() else 0
+    
+    paginated_results = results[current_offset : current_offset + page_size]
+    
+    # Set next offset header if there are more results
+    if current_offset + page_size < len(results):
+        if response:
+            response.headers["offset"] = str(current_offset + page_size)
+            
+    return paginated_results
 
 
 # ============== SPECIFIC ARTIFACT ROUTES (MUST COME BEFORE GENERIC ROUTES) ==============
