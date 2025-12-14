@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { artifactsController } from '../controllers/artifacts.controller';
 import { authenticate } from '../middleware/auth.middleware';
+import { uploadRateLimiter } from '../middleware/rate.middleware';
 import { asyncHandler } from '../middleware/error.middleware';
 
 /**
@@ -54,6 +55,7 @@ router.post(
 router.post(
   '/artifacts',
   authenticate,
+  uploadRateLimiter,
   asyncHandler(async (req, res) => {
     await artifactsController.enumerateArtifacts(req, res);
   })
@@ -80,6 +82,7 @@ router.post(
 router.post(
   '/artifact/byRegEx',
   authenticate,
+  uploadRateLimiter,
   asyncHandler(async (req, res) => {
     await artifactsController.searchByRegex(req, res);
   })

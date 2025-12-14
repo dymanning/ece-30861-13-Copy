@@ -2,6 +2,7 @@ import express, { Application, Request, Response } from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import artifactsRoutes from './routes/artifacts.routes';
+import { globalRateLimiter, enforceUploadSize } from './middleware/rate.middleware';
 import {
   errorHandler,
   notFoundHandler,
@@ -25,6 +26,16 @@ export function createApp(): Application {
       crossOriginEmbedderPolicy: false,
     })
   );
+
+  // ============================================
+  // DoS Mitigations (Rate Limit & Size Guard)
+  // ============================================
+
+  // Global per-IP rate limiter
+  app.use(globalRateLimiter);
+
+  // Upload payload size guard (uses Content-Length)
+  app.use(enforceUploadSize);
 
   // CORS: Enable Cross-Origin Resource Sharing
   app.use(
