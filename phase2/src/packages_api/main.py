@@ -109,14 +109,23 @@ def generate_artifact_id(name: str) -> str:
 
 def extract_name_from_url(url: str) -> str:
     """Extract artifact name from URL"""
-    if "huggingface.co" in url:
-        parts = url.rstrip("/").split("/")
-        return parts[-1] if parts else "unknown"
-    if "github.com" in url:
-        parts = url.rstrip("/").split("/")
-        return parts[-1] if len(parts) >= 2 else "unknown"
-    parts = url.rstrip("/").split("/")
-    return parts[-1] if parts else "unknown"
+    # Remove trailing slash
+    url = url.rstrip("/")
+    
+    # Handle .git suffix
+    if url.endswith(".git"):
+        url = url[:-4]
+        
+    parts = url.split("/")
+    name = parts[-1] if parts else "unknown"
+    
+    # Remove common archive extensions if present
+    for ext in [".zip", ".tar.gz", ".tgz", ".tar"]:
+        if name.endswith(ext):
+            name = name[:-len(ext)]
+            break
+            
+    return name
 
 
 # ============== AUTH / RBAC HELPERS ==============
@@ -238,10 +247,10 @@ def list_artifacts(
         q = db.query(Artifact)
         
         if query.name and query.name != "*":
-            q = q.filter(Artifact.name == query.name)
+            q = q.filter(func.lower(Artifact.name) == func.lower(query.name))
         
         if query.type:
-            q = q.filter(Artifact.artifact_type == query.type)
+            q = q.filter(func.lower(Artifact.artifact_type) == func.lower(query.type))
         
         artifacts = q.all()
         for art in artifacts:
@@ -263,7 +272,7 @@ def get_artifact_by_name(
     db: Session = Depends(get_db)
 ):
     """List artifact metadata for this name (NON-BASELINE)"""
-    artifacts = db.query(Artifact).filter(Artifact.name == name).all()
+    artifacts = db.query(Artifact).filter(func.lower(Artifact.name) == func.lower(name)).all()
     
     if not artifacts:
         raise HTTPException(status_code=404, detail="No such artifact.")
@@ -470,7 +479,7 @@ def get_artifact(
     """Get artifact by ID (BASELINE)"""
     artifact = db.query(Artifact).filter(
         Artifact.id == artifact_id,
-        Artifact.artifact_type == artifact_type
+        func.lower(Artifact.artifact_type) == func.lower(artifact_type)
     ).first()
     
     if not artifact:
@@ -500,7 +509,7 @@ def update_artifact(
     """Update artifact (BASELINE)"""
     artifact = db.query(Artifact).filter(
         Artifact.id == artifact_id,
-        Artifact.artifact_type == artifact_type
+        func.lower(Artifact.artifact_type) == func.lower(artifact_type)
     ).first()
     
     if not artifact:
@@ -524,7 +533,7 @@ def delete_artifact(
     user = require_role(get_user_from_header(x_authorization), ["admin"])
     artifact = db.query(Artifact).filter(
         Artifact.id == artifact_id,
-        Artifact.artifact_type == artifact_type
+        func.lower(Artifact.artifact_type) == func.lower(artifact_type)
     ).first()
     
     if not artifact:
@@ -553,7 +562,7 @@ def get_artifact_cost(
     """Get the cost of an artifact (BASELINE)"""
     artifact = db.query(Artifact).filter(
         Artifact.id == artifact_id,
-        Artifact.artifact_type == artifact_type
+        func.lower(Artifact.artifact_type) == func.lower(artifact_type)
     ).first()
     
     if not artifact:

@@ -63,8 +63,8 @@ export class ArtifactsService {
           // Wildcard: match all artifacts
           // No name condition needed
         } else {
-          // Exact name match
-          conditions.push(`name = $${paramIndex}`);
+          // Exact name match (case-insensitive)
+          conditions.push(`LOWER(name) = LOWER($${paramIndex})`);
           params.push(query.name);
           paramIndex++;
         }
@@ -165,7 +165,7 @@ export class ArtifactsService {
 
       // Return empty array if no matches (spec-compliant: 200 with empty array)
       if (result.rowCount === 0) {
-        return [];
+        throw new NotFoundError('No artifact found under this regex');
       }
 
       // Return fully populated ArtifactMetadata
@@ -194,7 +194,7 @@ export class ArtifactsService {
       const sql = `
         SELECT id, name, type, uri, size, rating, cost, dependencies, metadata
         FROM artifacts
-        WHERE name = $1
+        WHERE LOWER(name) = LOWER($1)
         ORDER BY created_at DESC, id
       `;
 
@@ -206,7 +206,7 @@ export class ArtifactsService {
 
       // Return empty array if no matches (spec-compliant: 200 with empty array)
       if (result.rowCount === 0) {
-        return [];
+        throw new NotFoundError('No such artifact');
       }
 
       // Return fully populated ArtifactMetadata
@@ -228,8 +228,28 @@ export class ArtifactsService {
       throw new BadRequestError('artifact_data must include url');
     }
     // Derive name from URL segment
-    const urlParts = data.url.split('/').filter(Boolean);
-    const derivedName = urlParts[urlParts.length - 1] || 'unknown-artifact';
+    let url = data.url;
+    // Remove trailing slash
+    if (url.endsWith('/')) {
+      url = url.slice(0, -1);
+    }
+    // Remove .git suffix
+    if (url.endsWith('.git')) {
+      url = url.slice(0, -4);
+    }
+
+    const urlParts = url.split('/').filter(Boolean);
+    let derivedName = urlParts[urlParts.length - 1] || 'unknown-artifact';
+
+    // Remove common archive extensions
+    const extensions = ['.zip', '.tar.gz', '.tgz', '.tar'];
+    for (const ext of extensions) {
+      if (derivedName.endsWith(ext)) {
+        derivedName = derivedName.slice(0, -ext.length);
+        break;
+      }
+    }
+
     const id = this.generateId();
     const type = artifact_type as 'model' | 'dataset' | 'code';
     
@@ -309,7 +329,7 @@ export class ArtifactsService {
     const sql = `
       SELECT id, name, type, url, uri, size, rating, cost, dependencies, metadata
       FROM artifacts 
-      WHERE id = $1 AND type = $2
+      WHERE id = $1 AND LOWER(type) = LOWER($2)
     `;
     const result = await db.query<ArtifactEntity>(sql, [id, artifact_type]);
     if (result.rowCount === 0) {
@@ -334,7 +354,7 @@ export class ArtifactsService {
       UPDATE artifacts 
       SET url = $1,
           updated_at = NOW() 
-      WHERE id = $2 AND type = $3
+      WHERE id = $2 AND LOWER(type) = LOWER($3)
     `;
     
     const result = await db.query(sql, [
@@ -353,13 +373,7 @@ export class ArtifactsService {
    * Works for all types: model, dataset, code
    */
   async deleteArtifact(artifact_type: string, id: string): Promise<void> {
-    // Validate type for consistency
-    const validTypes = ['model', 'dataset', 'code'];
-    if (!validTypes.includes(artifact_type)) {
-      throw new BadRequestError(`Invalid artifact type: ${artifact_type}`);
-    }
-
-    const sql = `DELETE FROM artifacts WHERE id = $1 AND type = $2`;
+    const sql = `DELETE FROM artifacts WHERE id = $1 AND LOWER(type) = LOWER($2)`;
     const result = await db.query(sql, [id, artifact_type]);
     if (result.rowCount === 0) {
       throw new NotFoundError('Artifact does not exist');
