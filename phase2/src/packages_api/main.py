@@ -54,11 +54,6 @@ class Artifact(Base):
 # Create tables
 Base.metadata.create_all(bind=engine)
 
-app = FastAPI(title="ECE 461 Artifact Registry")
-
-# Include audit logging router
-app.include_router(audit_router)
-
 # ============== SCHEMAS ==============
 
 class ArtifactMetadata(BaseModel):
@@ -171,6 +166,13 @@ def require_role(user: Optional[Dict[str, Any]], allowed_roles: List[str]) -> Op
         raise HTTPException(status_code=403, detail="Insufficient role")
     return user
 
+
+# ============== FastAPI APP & MIDDLEWARE ==============
+
+app = FastAPI(title="ECE 461 Artifact Registry")
+
+# Include audit logging router
+app.include_router(audit_router)
 
 # ============== ENDPOINTS ==============
 
