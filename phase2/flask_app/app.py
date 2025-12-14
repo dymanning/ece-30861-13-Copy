@@ -69,6 +69,18 @@ def verify_token() -> dict | None:
     """Attempt to verify token by calling the configured verify endpoint.
     Returns user JSON on success, None on failure.
     """
+    token = session.get("token")
+    if not token:
+        return None
+    
+    # Handle local DB sessions (tokens starting with "db-session-")
+    if token.startswith("db-session-"):
+        user_data = session.get("user")
+        if user_data:
+            return user_data
+        return None
+    
+    # Handle JWT tokens from external API
     headers = get_auth_headers()
     if not headers:
         return None
@@ -108,16 +120,27 @@ def role_required(role: str):
                 flash("Please sign in to access that page.", "warning")
                 return redirect(url_for("login", next=request.path))
 
-            # roles may be a list or a single string
-            roles = user.get("roles") or user.get("role")
-            if roles is None:
-                flash("You do not have permission to access that page.", "danger")
-                return redirect(url_for("index"))
-
-            if isinstance(roles, str):
-                has_role = roles == role
+            # Check for admin role - support both local DB and external auth formats
+            # Local DB users have is_admin field, external auth may have roles/role
+            if role == "admin":
+                has_role = user.get("is_admin", False)
+                if not has_role:
+                    # Also check roles/role for external auth compatibility
+                    roles = user.get("roles") or user.get("role")
+                    if roles:
+                        if isinstance(roles, str):
+                            has_role = roles == role
+                        else:
+                            has_role = role in roles
             else:
-                has_role = role in roles
+                # For non-admin roles, check roles/role fields
+                roles = user.get("roles") or user.get("role")
+                if roles is None:
+                    has_role = False
+                elif isinstance(roles, str):
+                    has_role = roles == role
+                else:
+                    has_role = role in roles
 
             if not has_role:
                 flash("You do not have permission to access that page.", "danger")
@@ -133,7 +156,7 @@ def role_required(role: str):
 def ensure_default_admin_user():
     """Create/ensure default admin user exists in local DB"""
     DEFAULT_USERNAME = "ece30861defaultadminuser"
-    DEFAULT_PASSWORD = "correcthorsebatterystaple123(!__+@**(A;DROP TABLE packages"
+    DEFAULT_PASSWORD = "'correcthorsebatterystaple123(!__+@**(A;DROP TABLE packages'"
     
     try:
         conn = get_db_connection()
@@ -207,7 +230,7 @@ def login():
             if row:
                 stored = row["password"]
                 # support both hashed and plaintext stored passwords
-                if stored and (stored.startswith("pbkdf2:") or stored.startswith("sha256$")):
+                if stored and (stored.startswith("pbkdf2:") or stored.startswith("sha256$") or stored.startswith("scrypt:")):
                     ok = check_password_hash(stored, password)
                 else:
                     ok = stored == password
@@ -215,7 +238,7 @@ def login():
                 if ok:
                     # store minimal session info; keep the token key for compatibility
                     session["token"] = "db-session-" + str(row["userID"])
-                    session["user"] = {"userID": row["userID"], "email": row["email"], "username": row["username"]}
+                    session["user"] = {"userID": row["userID"], "email": row["email"], "username": row["username"], "is_admin": bool(row["is_admin"])}
                     flash("Logged in successfully (local DB).", "success")
                     next_url = request.args.get("next") or url_for("dashboard")
                     return redirect(next_url)
@@ -288,7 +311,19 @@ def dashboard():
 @role_required("admin")
 def admin():
     user = verify_token()
-    return render_template("dashboard.html", user=user)
+    
+    # Fetch all users for admin panel
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        cur.execute("SELECT userID, username, email, is_admin FROM verifiedUsers ORDER BY username")
+        users = [dict(row) for row in cur.fetchall()]
+        conn.close()
+    except sqlite3.Error as e:
+        app.logger.error(f"Error fetching users: {e}")
+        users = []
+    
+    return render_template("admin.html", user=user, users=users)
 
 
 @app.errorhandler(404)

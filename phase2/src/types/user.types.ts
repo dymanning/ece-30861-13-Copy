@@ -1,10 +1,40 @@
-export type UserRole = 'admin' | 'user';
+// Permission types as per Phase 2 specification
+export type Permission = 'upload' | 'search' | 'download' | 'admin';
 
 export interface User {
-  id: string;
-  username: string;
+  username: string;  // Primary key
   passwordHash: string;
-  role: UserRole;
+  permissions: Permission[];  // Array of permissions
+  isAdmin: boolean;  // Admin flag for convenience
   createdAt: Date;
-  updatedAt: Date;
+}
+
+export interface AuthToken {
+  token: string;
+  username: string;
+  usageCount: number;  // Track API calls
+  maxUsage: number;    // 1000 per spec
+  expiresAt: Date;     // 10 hours from creation
+  createdAt: Date;
+}
+
+export interface LoginRequest {
+  User: {
+    name: string;
+    isAdmin: boolean;
+  };
+  Secret: {
+    password: string;
+  };
+}
+
+export interface RegisterRequest {
+  User: {
+    name: string;
+    isAdmin: boolean;
+  };
+  Secret: {
+    password: string;
+  };
+  permissions?: Permission[];
 }
