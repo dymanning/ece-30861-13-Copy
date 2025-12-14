@@ -644,6 +644,9 @@ export class ArtifactsService {
       rating,
       cost,
       dependencies,
+      metadata: typeof entity.metadata === 'string' && entity.metadata
+        ? (() => { try { return JSON.parse(entity.metadata); } catch { return entity.metadata; } })()
+        : entity.metadata,
     };
   }
 
