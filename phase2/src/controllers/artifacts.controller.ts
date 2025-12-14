@@ -96,9 +96,9 @@ export class ArtifactsController {
         pagination.limit
       );
 
-      // Set pagination header
+      // Set pagination header (must be string)
       if (paginatedResults.nextOffset !== null) {
-        res.set('offset', paginatedResults.nextOffset);
+        res.set('offset', String(paginatedResults.nextOffset));
       }
 
       // Log performance
