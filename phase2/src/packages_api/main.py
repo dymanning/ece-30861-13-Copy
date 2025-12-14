@@ -6,6 +6,7 @@ from typing import Optional, List, Dict, Any, Union
 import uuid
 import random
 import re
+import sre_parse
 import hashlib
 import logging
 import base64
@@ -120,6 +121,71 @@ def extract_name_from_url(url: str) -> str:
         return parts[-1] if len(parts) >= 2 else "unknown"
     parts = url.rstrip("/").split("/")
     return parts[-1] if parts else "unknown"
+
+
+# ============== REGEX SAFETY (ReDoS) ==============
+
+_MAX_REGEX_LENGTH = 200
+_MAX_REGEX_RESULTS = 1000
+_MAX_README_CHARS_FOR_REGEX = 20_000
+
+
+def _regex_has_nested_repeats(subpattern, repeat_depth: int = 0) -> bool:
+    """
+    Conservative ReDoS guard: reject nested quantifiers like (a+)+ or (.*){2,}.
+
+    This uses Python's stdlib `sre_parse` tokenization and is intentionally strict.
+    """
+    for op, arg in getattr(subpattern, "data", []):
+        if op in (sre_parse.MAX_REPEAT, sre_parse.MIN_REPEAT):
+            if repeat_depth >= 1:
+                return True
+            _min_repeat, _max_repeat, inner = arg
+            if _regex_has_nested_repeats(inner, repeat_depth + 1):
+                return True
+        elif op is sre_parse.SUBPATTERN:
+            # arg: (group, add_flags, del_flags, subpattern)
+            inner = arg[-1]
+            if _regex_has_nested_repeats(inner, repeat_depth):
+                return True
+        elif op is sre_parse.BRANCH:
+            # arg: (None, [subpattern, ...])
+            branches = arg[1]
+            for branch in branches:
+                if _regex_has_nested_repeats(branch, repeat_depth):
+                    return True
+        elif op in (sre_parse.ASSERT, sre_parse.ASSERT_NOT):
+            # arg: (dir, subpattern)
+            inner = arg[1]
+            if _regex_has_nested_repeats(inner, repeat_depth):
+                return True
+        elif op is sre_parse.GROUPREF_EXISTS:
+            # arg: (group, then_subpattern, else_subpattern)
+            then_sp = arg[1]
+            else_sp = arg[2]
+            if _regex_has_nested_repeats(then_sp, repeat_depth):
+                return True
+            if else_sp is not None and _regex_has_nested_repeats(else_sp, repeat_depth):
+                return True
+
+    return False
+
+
+def _validate_regex_for_search(pattern: str) -> None:
+    if pattern is None or not isinstance(pattern, str) or not pattern.strip():
+        raise HTTPException(status_code=400, detail="Invalid regex pattern")
+
+    if len(pattern) > _MAX_REGEX_LENGTH:
+        raise HTTPException(status_code=400, detail="Invalid regex pattern")
+
+    try:
+        parsed = sre_parse.parse(pattern)
+    except re.error:
+        raise HTTPException(status_code=400, detail="Invalid regex pattern")
+
+    # Strict-but-simple ReDoS guard.
+    if _regex_has_nested_repeats(parsed):
+        raise HTTPException(status_code=400, detail="Invalid regex pattern")
 
 
 # ============== AUTH / RBAC HELPERS ==============
@@ -331,27 +397,34 @@ def get_artifact_by_name(
 
 
 @app.post("/artifact/byRegEx")
-def search_by_regex(
+async def search_by_regex(
     body: ArtifactRegEx = Body(...),
     x_authorization: Optional[str] = Header(None, alias="X-Authorization"),
     db: Session = Depends(get_db)
 ):
     """Get artifacts matching regex (BASELINE)"""
+    _validate_regex_for_search(body.regex)
+
     try:
         pattern = re.compile(body.regex, re.IGNORECASE)
     except re.error:
         raise HTTPException(status_code=400, detail="Invalid regex pattern")
     
     all_artifacts = db.query(Artifact).all()
-    matches = []
+    matches: List[Dict[str, Any]] = []
     
     for art in all_artifacts:
-        if pattern.search(art.name) or (art.readme and pattern.search(art.readme)):
-            matches.append({
-                "name": art.name,
-                "id": art.id,
-                "type": art.artifact_type
-            })
+        readme = art.readme[:_MAX_README_CHARS_FOR_REGEX] if art.readme else None
+        if pattern.search(art.name) or (readme and pattern.search(readme)):
+            matches.append(
+                {
+                    "name": art.name,
+                    "id": art.id,
+                    "type": art.artifact_type,
+                }
+            )
+            if len(matches) >= _MAX_REGEX_RESULTS:
+                break
     
     if not matches:
         raise HTTPException(status_code=404, detail="No artifact found under this regex.")
