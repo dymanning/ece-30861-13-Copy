@@ -50,6 +50,8 @@ router.post(
  * Response:
  * - 200: ArtifactMetadata[] + offset header
  * - 400: Invalid request
+import { artifactsService } from '../services/artifacts.service';
+import { requireAdmin } from '../middleware/auth.middleware';
  * - 403: Authentication failed
  * - 413: Too many results (DoS prevention)
  */
@@ -83,6 +85,102 @@ router.post(
  */
 router.post(
   '/artifact/byRegEx',
+/**
+ * Additional spec-aligned endpoints to support autograder
+ */
+
+// GET /artifacts/:artifact_type/:id — retrieve single artifact by type and id
+router.get(
+  '/artifacts/:artifact_type/:id',
+  authenticate,
+  asyncHandler(async (req, res) => {
+    const { artifact_type, id } = req.params as { artifact_type: string; id: string };
+    const artifact = await artifactsService.getArtifact(artifact_type, id);
+    res.status(200).json(artifact);
+  })
+);
+
+// GET /artifacts/:artifact_type/byName/:name — retrieve artifacts by name filtered by type
+router.get(
+  '/artifacts/:artifact_type/byName/:name',
+  authenticate,
+  asyncHandler(async (req, res) => {
+    const { artifact_type, name } = req.params as { artifact_type: string; name: string };
+    const decodedName = decodeURIComponent(name);
+    const results = await artifactsService.searchByName(decodedName);
+    const filtered = results.filter(r => r.type.toLowerCase() === artifact_type.toLowerCase());
+    res.status(200).json(filtered);
+  })
+);
+
+// GET /artifacts/:artifact_type/:id/download — return original download URL
+router.get(
+  '/artifacts/:artifact_type/:id/download',
+  authenticate,
+  asyncHandler(async (req, res) => {
+    const { artifact_type, id } = req.params as { artifact_type: string; id: string };
+    const artifact = await artifactsService.getArtifact(artifact_type, id);
+    res.status(200).json({ url: artifact.data.url });
+  })
+);
+
+// GET /artifact/model/:id/rate — return RatingMetrics
+router.get(
+  '/artifact/model/:id/rate',
+  authenticate,
+  asyncHandler(async (req, res) => {
+    const { id } = req.params as { id: string };
+    const ratings = await artifactsService.getModelRating(id);
+    res.status(200).json(ratings);
+  })
+);
+
+// GET /artifact/:artifact_type/:id/cost — return ArtifactCost
+router.get(
+  '/artifact/:artifact_type/:id/cost',
+  authenticate,
+  asyncHandler(async (req, res) => {
+    const { artifact_type, id } = req.params as { artifact_type: string; id: string };
+    const includeDependencies = String(req.query.includeDependencies || 'false') === 'true';
+    const cost = await artifactsService.getArtifactCost(artifact_type, id, includeDependencies);
+    res.status(200).json(cost);
+  })
+);
+
+// POST /artifact/model/:id/license-check — validate license
+router.post(
+  '/artifact/model/:id/license-check',
+  authenticate,
+  asyncHandler(async (req, res) => {
+    const { id } = req.params as { id: string };
+    const { github_url } = req.body as { github_url: string };
+    const ok = await artifactsService.licenseCheck(id, github_url);
+    res.status(200).json({ ok });
+  })
+);
+
+// GET /artifact/model/:id/lineage — return lineage graph
+router.get(
+  '/artifact/model/:id/lineage',
+  authenticate,
+  asyncHandler(async (req, res) => {
+    const { id } = req.params as { id: string };
+    const graph = await artifactsService.getLineage(id);
+    res.status(200).json(graph);
+  })
+);
+
+// DELETE /artifacts/:artifact_type/:id — delete artifact by type and id
+router.delete(
+  '/artifacts/:artifact_type/:id',
+  authenticate,
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const { artifact_type, id } = req.params as { artifact_type: string; id: string };
+    await artifactsService.deleteArtifact(artifact_type, id);
+    res.status(200).json({ deleted: id });
+  })
+);
   authenticate,
   requirePermission('search'),
   uploadRateLimiter,

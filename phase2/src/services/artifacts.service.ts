@@ -185,9 +185,9 @@ export class ArtifactsService {
    * Returns all artifacts with matching name
    * 
    * @param name - Exact artifact name
-   * @returns Array of simple artifact metadata (name, id, type)
+   * @returns Array of full artifact metadata
    */
-  async searchByName(name: string): Promise<SimpleArtifactMetadata[]> {
+  async searchByName(name: string): Promise<ArtifactMetadata[]> {
     try {
       // Ensure name is properly decoded (controller should pass decoded, but be defensive)
       const decodedName = typeof name === 'string' ? name : String(name);
@@ -195,7 +195,7 @@ export class ArtifactsService {
       const sql = `
         SELECT id, name, type, uri, size, rating, cost, dependencies, metadata
         FROM artifacts
-        WHERE LOWER(name) = LOWER($1)
+        WHERE name = $1
         ORDER BY created_at DESC, id
       `;
 
@@ -210,8 +210,8 @@ export class ArtifactsService {
         throw new NotFoundError('No such artifact');
       }
 
-      // Return simple ArtifactMetadata per OpenAPI spec (only name, id, type)
-      return result.rows.map(row => this.toSimpleArtifactMetadata(row));
+      // Return full ArtifactMetadata per OpenAPI spec
+      return result.rows.map(row => this.toArtifactMetadata(row));
     } catch (error) {
       if (error instanceof NotFoundError) {
         throw error;
@@ -224,14 +224,37 @@ export class ArtifactsService {
   /**
    * Create new artifact (spec: POST /artifact/{artifact_type})
    */
-  async createArtifact(artifact_type: string, data: { url: string; name?: string }): Promise<Artifact> {
+  async createArtifact(artifact_type: string, data: { url: string; name?: string; sha256?: string; size_bytes?: number }): Promise<Artifact> {
     if (!data || !data.url) {
       throw new BadRequestError('artifact_data must include url');
     }
-    // Prefer provided name; fallback to URL basename
-    const providedName = (data.name || '').trim();
-    const urlParts = data.url.split('/').filter(Boolean);
-    const derivedName = providedName || urlParts[urlParts.length - 1] || 'unknown-artifact';
+    // Derive name from URL segment or use provided name
+    let derivedName = data.name;
+    
+    if (!derivedName) {
+      let url = data.url;
+      // Remove trailing slash
+      if (url.endsWith('/')) {
+        url = url.slice(0, -1);
+      }
+      // Remove .git suffix
+      if (url.endsWith('.git')) {
+        url = url.slice(0, -4);
+      }
+
+      const urlParts = url.split('/').filter(Boolean);
+      derivedName = urlParts[urlParts.length - 1] || 'unknown-artifact';
+
+      // Remove common archive extensions
+      const extensions = ['.zip', '.tar.gz', '.tgz', '.tar'];
+      for (const ext of extensions) {
+        if (derivedName.endsWith(ext)) {
+          derivedName = derivedName.slice(0, -ext.length);
+          break;
+        }
+      }
+    }
+
     const id = this.generateId();
     const type = artifact_type as 'model' | 'dataset' | 'code';
     
@@ -252,21 +275,39 @@ export class ArtifactsService {
     };
     const defaultCost = { inference_cents: 0, storage_cents: 0 };
 
+    // Integrity: validate provided hash/size metadata (if present)
+    const { sha256, size_bytes } = data;
+    if (sha256 || size_bytes) {
+      const { verifyFileHashMetadata } = await import('../utils/metric.utils');
+      const ok = await verifyFileHashMetadata(sha256, size_bytes);
+      if (!ok) {
+        throw new BadRequestError('Invalid integrity metadata: sha256 must be 64-hex; size_bytes must be positive integer');
+      }
+    }
+
     // Insert artifact with default internal values
     const insertSql = `
       INSERT INTO artifacts (
         id, name, type, url, uri, size, readme, metadata, rating, cost, dependencies
       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
     `;
+    const integrityMeta = {
+      integrity: {
+        sha256: sha256 || null,
+        size_bytes: size_bytes || null,
+        verified: false,
+      },
+    };
+
     const params = [
       id,
       derivedName,
       type,
       data.url,
       uri,
-      DEFAULT_SIZE,
+      size_bytes ?? DEFAULT_SIZE,
       '',
-      JSON.stringify({}),
+      JSON.stringify(integrityMeta),
       JSON.stringify(defaultRating),
       JSON.stringify(defaultCost),
       JSON.stringify([]),
@@ -288,7 +329,7 @@ export class ArtifactsService {
         name: derivedName,
         type,
         uri,
-        size: DEFAULT_SIZE,
+        size: size_bytes ?? DEFAULT_SIZE,
         rating: defaultRating,
         cost: defaultCost,
         dependencies: [],
