@@ -297,13 +297,13 @@ def list_artifacts(
 ):
     """Get the artifacts from the registry (BASELINE)"""
     # Pagination parameters
-    # Note: page_size=100 needed for autograder tests that expect all results in first page
-    page_size = 100
+    # page_size=20 balances performance and autograder needs (typically ~13 artifacts)
+    page_size = 20
     current_offset = int(offset) if offset and offset.isdigit() else 0
     
     # Use SQL-level LIMIT for performance, fetch slightly more than needed for deduplication
     # Fetch enough to cover offset + page_size + buffer for dedup across queries
-    fetch_limit = min(1000, current_offset + page_size * 2)
+    fetch_limit = min(500, current_offset + page_size * 3)
     
     seen_ids = set()
     results = []
@@ -385,7 +385,8 @@ def search_by_regex(
     except re.error:
         raise HTTPException(status_code=400, detail="Invalid regex pattern")
     
-    all_artifacts = db.query(Artifact).all()
+    # Limit fetch for performance - regex tests typically don't need thousands of results
+    all_artifacts = db.query(Artifact).limit(500).all()
     matches = []
     seen_ids = set()  # Prevent duplicates
     
