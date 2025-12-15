@@ -1,0 +1,17 @@
+Error: Cannot find module 'express-rate-limit'
+Require stack:
+- C:\Users\17893\Desktop\ece-30861-13-Copy\phase2\src\middleware\rate.middleware.ts
+- C:\Users\17893\Desktop\ece-30861-13-Copy\phase2\src\routes\artifacts.routes.ts
+- C:\Users\17893\Desktop\ece-30861-13-Copy\phase2\src\app.ts
+- C:\Users\17893\Desktop\ece-30861-13-Copy\phase2\src\server.ts
+    at Function._resolveFilename (node:internal/modules/cjs/loader:1383:15)
+    at defaultResolveImpl (node:internal/modules/cjs/loader:1025:19)
+    at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1030:22)
+    at Function._load (node:internal/modules/cjs/loader:1192:37)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:237:24)
+    at Module.require (node:internal/modules/cjs/loader:1463:12)
+    at require (node:internal/modules/helpers:147:16)
+    at Object.<anonymous> (C:\Users\17893\Desktop\ece-30861-13-Copy\phase2\src\middleware\rate.middleware.ts:1:1)
+    at Module.<anonymous> (node:internal/modules/cjs/loader:1706:14)
+^C^C

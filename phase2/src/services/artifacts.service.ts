@@ -8,6 +8,7 @@ import {
   RatingMetrics,
   ArtifactCost,
   ArtifactLineageGraph,
+  SimpleArtifactMetadata,
 } from '../types/artifacts.types';
 import { config } from '../config/config';
 import { logger } from '../utils/logger';
@@ -33,12 +34,12 @@ export class ArtifactsService {
    * 
    * @param queries - Array of artifact queries
    * @param pagination - Pagination parameters
-   * @returns Array of artifact metadata
+   * @returns Array of simple artifact metadata (name, id, type)
    */
   async enumerateArtifacts(
     queries: ArtifactQuery[],
     pagination: PaginationParams
-  ): Promise<ArtifactMetadata[]> {
+  ): Promise<SimpleArtifactMetadata[]> {
     try {
       // Validate input
       if (!queries || queries.length === 0) {
@@ -114,8 +115,8 @@ export class ArtifactsService {
         return [];
       }
 
-      // Return fully populated ArtifactMetadata (all required fields)
-      return result.rows.map(row => this.toArtifactMetadata(row));
+      // Return simple ArtifactMetadata per OpenAPI spec (only name, id, type)
+      return result.rows.map(row => this.toSimpleArtifactMetadata(row));
     } catch (error) {
       if (error instanceof BadRequestError) {
         throw error;
@@ -130,9 +131,9 @@ export class ArtifactsService {
    * Searches both name and README content
    * 
    * @param pattern - Regex pattern (already validated)
-   * @returns Array of matching artifact metadata
+   * @returns Array of simple artifact metadata (name, id, type)
    */
-  async searchByRegex(pattern: string): Promise<ArtifactMetadata[]> {
+  async searchByRegex(pattern: string): Promise<SimpleArtifactMetadata[]> {
     try {
       // SQL query with PostgreSQL regex operator
       // Search in both name and readme fields
@@ -168,8 +169,8 @@ export class ArtifactsService {
         throw new NotFoundError('No artifact found under this regex');
       }
 
-      // Return fully populated ArtifactMetadata
-      return result.rows.map(row => this.toArtifactMetadata(row));
+      // Return simple ArtifactMetadata per OpenAPI spec (only name, id, type)
+      return result.rows.map(row => this.toSimpleArtifactMetadata(row));
     } catch (error) {
       if (error instanceof NotFoundError) {
         throw error;
@@ -184,9 +185,9 @@ export class ArtifactsService {
    * Returns all artifacts with matching name
    * 
    * @param name - Exact artifact name
-   * @returns Array of matching artifact metadata
+   * @returns Array of simple artifact metadata (name, id, type)
    */
-  async searchByName(name: string): Promise<ArtifactMetadata[]> {
+  async searchByName(name: string): Promise<SimpleArtifactMetadata[]> {
     try {
       // Ensure name is properly decoded (controller should pass decoded, but be defensive)
       const decodedName = typeof name === 'string' ? name : String(name);
@@ -209,8 +210,8 @@ export class ArtifactsService {
         throw new NotFoundError('No such artifact');
       }
 
-      // Return fully populated ArtifactMetadata
-      return result.rows.map(row => this.toArtifactMetadata(row));
+      // Return simple ArtifactMetadata per OpenAPI spec (only name, id, type)
+      return result.rows.map(row => this.toSimpleArtifactMetadata(row));
     } catch (error) {
       if (error instanceof NotFoundError) {
         throw error;
@@ -238,47 +239,8 @@ export class ArtifactsService {
       url = url.slice(0, -4);
     }
 
-    let derivedName = 'unknown-artifact';
-    try {
-      // Handle invalid URLs gracefully
-      const urlObj = new URL(url.startsWith('http') ? url : `https://${url}`);
-      const hostname = urlObj.hostname;
-      const pathname = urlObj.pathname;
-      const parts = pathname.split('/').filter(Boolean);
-
-      if (hostname.includes('github.com')) {
-        // github.com/user/repo
-        if (parts.length >= 2) {
-          derivedName = parts[1];
-        } else if (parts.length === 1) {
-          derivedName = parts[0];
-        }
-      } else if (hostname.includes('huggingface.co')) {
-        // huggingface.co/user/model/tree/main
-        const treeIndex = parts.indexOf('tree');
-        const blobIndex = parts.indexOf('blob');
-        let endIndex = parts.length;
-        
-        if (treeIndex !== -1) endIndex = Math.min(endIndex, treeIndex);
-        if (blobIndex !== -1) endIndex = Math.min(endIndex, blobIndex);
-        
-        const relevantParts = parts.slice(0, endIndex);
-        if (relevantParts.length > 0) {
-          derivedName = relevantParts[relevantParts.length - 1];
-        }
-      } else {
-        // Generic URL
-        if (parts.length > 0) {
-          derivedName = parts[parts.length - 1];
-        }
-      }
-    } catch (e) {
-      // Fallback
-      const parts = url.split('/').filter(Boolean);
-      if (parts.length > 0) {
-        derivedName = parts[parts.length - 1];
-      }
-    }
+    const urlParts = url.split('/').filter(Boolean);
+    let derivedName = urlParts[urlParts.length - 1] || 'unknown-artifact';
 
     // Remove common archive extensions
     const extensions = ['.zip', '.tar.gz', '.tgz', '.tar'];
@@ -719,6 +681,18 @@ export class ArtifactsService {
   }
 
 
+
+  /**
+   * Convert database entity to simple ArtifactMetadata for enumeration endpoints
+   * Per OpenAPI spec, only includes name, id, type
+   */
+  private toSimpleArtifactMetadata(entity: ArtifactEntity): SimpleArtifactMetadata {
+    return {
+      name: entity.name,
+      id: entity.id,
+      type: entity.type as 'model' | 'dataset' | 'code',
+    };
+  }
 
   /**
    * Convert database entity to OpenAPI-compliant ArtifactMetadata
