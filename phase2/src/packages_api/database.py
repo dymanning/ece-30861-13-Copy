@@ -54,6 +54,10 @@ def connect(dbapi_connection, connection_record):
             if item is None:
                 return False
             try:
+                # Limit text length to prevent ReDoS/performance issues
+                if isinstance(item, str) and len(item) > 20000:
+                    item = item[:20000]
+                
                 reg = re.compile(expr)
                 return reg.search(item) is not None
             except Exception:
