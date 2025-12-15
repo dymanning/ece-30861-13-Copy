@@ -98,7 +98,7 @@ export class ArtifactsService {
         OFFSET $${paramIndex + 1}
       `;
 
-      params.push(pagination.limit + 1); // Fetch one extra to detect more pages
+      params.push(pagination.limit); // limit already includes +1 from controller
       params.push(pagination.offset);
 
       logger.debug('Enumerate artifacts query', {
