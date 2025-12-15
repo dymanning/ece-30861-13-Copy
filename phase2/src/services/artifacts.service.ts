@@ -82,7 +82,7 @@ export class ArtifactsService {
           conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
         queryParts.push(`
-          SELECT DISTINCT id, name, type, uri, size, rating, cost, dependencies, metadata
+          SELECT id, name, type
           FROM artifacts
           ${whereClause}
         `);
@@ -138,7 +138,7 @@ export class ArtifactsService {
       // SQL query with PostgreSQL regex operator
       // Search in both name and readme fields
       const sql = `
-        SELECT DISTINCT id, name, type, uri, size, rating, cost, dependencies, metadata
+        SELECT id, name, type
         FROM artifacts
         WHERE 
           name ~* $1
@@ -193,7 +193,7 @@ export class ArtifactsService {
       const decodedName = typeof name === 'string' ? name : String(name);
       
       const sql = `
-        SELECT id, name, type, uri, size, rating, cost, dependencies, metadata
+        SELECT id, name, type
         FROM artifacts
         WHERE LOWER(name) = LOWER($1)
         ORDER BY created_at DESC, id
