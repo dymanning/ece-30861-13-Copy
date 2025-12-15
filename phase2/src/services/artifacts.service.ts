@@ -224,7 +224,7 @@ export class ArtifactsService {
   /**
    * Create new artifact (spec: POST /artifact/{artifact_type})
    */
-  async createArtifact(artifact_type: string, data: { url: string; name?: string }): Promise<Artifact> {
+  async createArtifact(artifact_type: string, data: { url: string; name?: string; sha256?: string; size_bytes?: number }): Promise<Artifact> {
     if (!data || !data.url) {
       throw new BadRequestError('artifact_data must include url');
     }
@@ -271,21 +271,39 @@ export class ArtifactsService {
     };
     const defaultCost = { inference_cents: 0, storage_cents: 0 };
 
+    // Integrity: validate provided hash/size metadata (if present)
+    const { sha256, size_bytes } = data;
+    if (sha256 || size_bytes) {
+      const { verifyFileHashMetadata } = await import('../utils/metric.utils');
+      const ok = await verifyFileHashMetadata(sha256, size_bytes);
+      if (!ok) {
+        throw new BadRequestError('Invalid integrity metadata: sha256 must be 64-hex; size_bytes must be positive integer');
+      }
+    }
+
     // Insert artifact with default internal values
     const insertSql = `
       INSERT INTO artifacts (
         id, name, type, url, uri, size, readme, metadata, rating, cost, dependencies
       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
     `;
+    const integrityMeta = {
+      integrity: {
+        sha256: sha256 || null,
+        size_bytes: size_bytes || null,
+        verified: false,
+      },
+    };
+
     const params = [
       id,
       derivedName,
       type,
       data.url,
       uri,
-      DEFAULT_SIZE,
+      size_bytes ?? DEFAULT_SIZE,
       '',
-      JSON.stringify({}),
+      JSON.stringify(integrityMeta),
       JSON.stringify(defaultRating),
       JSON.stringify(defaultCost),
       JSON.stringify([]),
@@ -307,7 +325,7 @@ export class ArtifactsService {
         name: derivedName,
         type,
         uri,
-        size: DEFAULT_SIZE,
+        size: size_bytes ?? DEFAULT_SIZE,
         rating: defaultRating,
         cost: defaultCost,
         dependencies: [],
