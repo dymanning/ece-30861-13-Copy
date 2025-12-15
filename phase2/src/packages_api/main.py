@@ -26,7 +26,8 @@ from fastapi import (
     Body,
     File,
     UploadFile,
-    Form
+    Form,
+    Response
 )
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import JSONResponse, Response
@@ -300,9 +301,9 @@ def reset_registry(
 def list_artifacts(
     queries: List[ArtifactQuery] = Body(...),
     offset: Optional[str] = Query(None),
+    response: Response,
     x_authorization: Optional[str] = Header(None, alias="X-Authorization"),
-    db: Session = Depends(get_db),
-    response: Response = None
+    db: Session = Depends(get_db)
 ):
     """Get the artifacts from the registry (BASELINE)"""
     # Pagination parameters
