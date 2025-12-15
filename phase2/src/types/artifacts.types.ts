@@ -54,6 +54,19 @@ export interface ArtifactLineageGraph {
   }>;
 }
 
+/**
+ * Simple ArtifactMetadata for enumeration endpoints (POST /artifacts, POST /artifact/byRegEx, GET /artifact/byName/:name)
+ * Per OpenAPI spec, only includes name, id, type
+ */
+export interface SimpleArtifactMetadata {
+  name: string;
+  id: string;
+  type: ArtifactType;
+}
+
+/**
+ * Full ArtifactMetadata for detailed artifact retrieval
+ */
 export interface ArtifactMetadata {
   id: string;
   name: string;
@@ -235,6 +248,13 @@ export interface AppConfig {
   };
   features?: {
     enableBedrock?: boolean;
+  };
+  upload: {
+    maxBytes: number;
+    rateLimit: {
+      windowMs: number;
+      max: number;
+    };
   };
 }
 
