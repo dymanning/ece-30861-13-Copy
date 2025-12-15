@@ -315,7 +315,7 @@ def list_artifacts(
             break
     
     # Handle pagination
-    page_size = 10
+    page_size = 100
     current_offset = int(offset) if offset and offset.isdigit() else 0
     
     paginated_results = results[current_offset : current_offset + page_size]
