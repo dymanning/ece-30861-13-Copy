@@ -301,8 +301,9 @@ def list_artifacts(
     page_size = 100
     current_offset = int(offset) if offset and offset.isdigit() else 0
     
-    # Optimized fetch limit to reduce memory usage
-    fetch_limit = min(500, current_offset + page_size + 50)
+    # Fetch enough items to cover the requested page + buffer
+    # We must fetch from the beginning (limit only) because we are merging multiple queries in Python
+    fetch_limit = current_offset + page_size + 50
     
     seen_ids = set()
     results = []
