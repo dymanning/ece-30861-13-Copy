@@ -606,28 +606,29 @@ export class ArtifactsService {
    */
   async estimateResultCount(queries: ArtifactQuery[]): Promise<number> {
     try {
-      // Simple estimation: if any query has wildcard, return total count
-      const hasWildcard = queries.some((q) => q.name === '*');
-
-      if (hasWildcard) {
-        return await this.getTotalCount();
-      }
-
-      // For specific queries, estimate based on name matches
-      // This is a rough estimate - actual implementation could be more sophisticated
       let estimatedTotal = 0;
 
       for (const query of queries) {
-        const sql = `
-          SELECT COUNT(*) as count
-          FROM artifacts
-          WHERE name = $1
-          ${query.types && query.types.length > 0 ? 'AND type = ANY($2::text[])' : ''}
-        `;
-
-        const params: any[] = [query.name];
-        if (query.types && query.types.length > 0) {
-          params.push(query.types);
+        let sql: string;
+        const params: any[] = [];
+        
+        if (query.name === '*') {
+          // Wildcard query - count with optional type filter
+          if (query.types && query.types.length > 0) {
+            sql = `SELECT COUNT(*) as count FROM artifacts WHERE type = ANY($1::text[])`;
+            params.push(query.types);
+          } else {
+            sql = `SELECT COUNT(*) as count FROM artifacts`;
+          }
+        } else {
+          // Specific name query
+          sql = `SELECT COUNT(*) as count FROM artifacts WHERE LOWER(name) = LOWER($1)`;
+          params.push(query.name);
+          
+          if (query.types && query.types.length > 0) {
+            sql += ` AND type = ANY($${params.length + 1}::text[])`;
+            params.push(query.types);
+          }
         }
 
         const result = await db.query<{ count: string }>(sql, params);
