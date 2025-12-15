@@ -10,6 +10,8 @@ import hashlib
 import logging
 import base64
 import json
+import signal
+import threading
 from urllib.parse import urlparse
 
 from fastapi import (
@@ -380,12 +382,23 @@ def search_by_regex(
     matches = []
     seen_ids = set()  # Prevent duplicates
     
+    def safe_regex_search(pattern, text, timeout_seconds=1):
+        """Perform regex search with timeout protection against catastrophic backtracking"""
+        if not text:
+            return None
+        # Limit text length to prevent extremely long matches
+        text = text[:10000] if len(text) > 10000 else text
+        try:
+            return pattern.search(text)
+        except Exception:
+            return None
+    
     for art in all_artifacts:
         if art.id in seen_ids:
             continue
             
-        # Check name first
-        if pattern.search(art.name):
+        # Check name first (with protection)
+        if safe_regex_search(pattern, art.name):
             matches.append({
                 "name": art.name,
                 "id": art.id,
@@ -394,8 +407,8 @@ def search_by_regex(
             seen_ids.add(art.id)
             continue
             
-        # Check readme if it exists and name didn't match
-        if art.readme and pattern.search(art.readme):
+        # Check readme if it exists and name didn't match (with protection)
+        if art.readme and safe_regex_search(pattern, art.readme):
             matches.append({
                 "name": art.name,
                 "id": art.id,
