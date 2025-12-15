@@ -287,34 +287,7 @@ def list_artifacts(
     page_size = 100
     current_offset = int(offset) if offset and offset.isdigit() else 0
     
-    # For simple single-query case (most common), use efficient SQL pagination
-    if len(queries) == 1:
-        query = queries[0]
-        q = db.query(Artifact)
-        
-        if query.name and query.name != "*":
-            q = q.filter(func.lower(Artifact.name) == func.lower(query.name))
-        
-        if query.types:
-            type_filters = [func.lower(Artifact.artifact_type) == func.lower(t) for t in query.types]
-            q = q.filter(or_(*type_filters))
-        
-        # Apply pagination at SQL level - fetch one extra to detect more pages
-        q = q.order_by(Artifact.name, Artifact.id)
-        artifacts = q.offset(current_offset).limit(page_size + 1).all()
-        
-        has_more = len(artifacts) > page_size
-        if has_more:
-            artifacts = artifacts[:page_size]
-        
-        results = [{"name": art.name, "id": art.id, "type": art.artifact_type} for art in artifacts]
-        
-        if has_more and response:
-            response.headers["offset"] = str(current_offset + page_size)
-        
-        return results
-    
-    # For multiple queries, collect results then paginate in memory
+    # Collect all matching artifacts efficiently
     seen_ids = set()
     results = []
     
@@ -328,13 +301,22 @@ def list_artifacts(
             type_filters = [func.lower(Artifact.artifact_type) == func.lower(t) for t in query.types]
             q = q.filter(or_(*type_filters))
         
-        # Limit results to avoid explosion
-        artifacts = q.order_by(Artifact.name, Artifact.id).limit(page_size + current_offset + 1).all()
+        # Fetch only what we need for this page plus one to check for more
+        # Use a reasonable limit to prevent DoS
+        max_fetch = min(500, current_offset + page_size + 1)
+        artifacts = q.order_by(Artifact.name, Artifact.id).limit(max_fetch).all()
         
         for art in artifacts:
             if art.id not in seen_ids:
                 seen_ids.add(art.id)
                 results.append({"name": art.name, "id": art.id, "type": art.artifact_type})
+                
+                # Stop early if we have enough for this page
+                if len(results) >= current_offset + page_size + 1:
+                    break
+        
+        if len(results) >= current_offset + page_size + 1:
+            break
     
     # Sort for consistent ordering
     results.sort(key=lambda x: (x["name"], x["id"]))
@@ -342,7 +324,8 @@ def list_artifacts(
     # Apply pagination
     paginated = results[current_offset:current_offset + page_size]
     
-    if current_offset + page_size < len(results) and response:
+    # Check if there are more results
+    if len(results) > current_offset + page_size and response:
         response.headers["offset"] = str(current_offset + page_size)
     
     return paginated
