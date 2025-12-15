@@ -304,7 +304,50 @@ def logout():
 @login_required
 def dashboard():
     user = verify_token()
-    return render_template("dashboard.html", user=user)
+    
+    # Fetch all models from TypeScript API
+    models = []
+    try:
+        headers = {"X-Authorization": session.get("token", "")}
+        resp = requests.post(
+            "http://localhost:5000/artifacts",
+            headers=headers,
+            json=[{"type": "model"}],
+            timeout=5
+        )
+        if resp.status_code == 200:
+            models = resp.json()
+    except Exception as e:
+        app.logger.error(f"Error fetching models: {e}")
+    
+    return render_template("dashboard.html", user=user, models=models)
+
+
+@app.route("/model/<int:model_id>")
+@login_required
+def model_detail(model_id):
+    """Display detailed information about a specific model"""
+    user = verify_token()
+    model = None
+    
+    try:
+        headers = {"X-Authorization": session.get("token", "")}
+        resp = requests.get(
+            f"http://localhost:5000/artifacts/model/{model_id}",
+            headers=headers,
+            timeout=5
+        )
+        if resp.status_code == 200:
+            model = resp.json()
+        elif resp.status_code == 404:
+            flash("Model not found.", "warning")
+            return redirect(url_for("dashboard"))
+    except Exception as e:
+        app.logger.error(f"Error fetching model details: {e}")
+        flash("Could not load model details.", "warning")
+        return redirect(url_for("dashboard"))
+    
+    return render_template("model_detail.html", user=user, model=model)
 
 
 @app.route("/admin")

@@ -9,13 +9,13 @@
       <form method="post" action="{{ url_for('login') }}">
         <div class="mb-3">
           <label for="username" class="form-label">Username</label>
-          <input type="text" class="form-control" id="username" name="username" required>
+          <input type="text" class="form-control" id="username" name="username" required aria-label="Enter your username" title="Your login username">
         </div>
         <div class="mb-3">
           <label for="password" class="form-label">Password</label>
-          <input type="password" class="form-control" id="password" name="password" required>
+          <input type="password" class="form-control" id="password" name="password" required aria-label="Enter your password" title="Your login password">
         </div>
-        <button class="btn btn-primary w-100" type="submit">Sign in</button>
+        <button class="btn btn-primary w-100" type="submit" aria-label="Sign in to your account">Sign in</button>
       </form>
     </div>
   </div>

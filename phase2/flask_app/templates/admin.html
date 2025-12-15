@@ -16,8 +16,8 @@
       <h4>System Actions</h4>
     </div>
     <div class="card-body">
-      <button class="btn btn-danger" onclick="resetSystem()">Reset System</button>
-      <small class="text-muted d-block mt-2">Clears all users and recreates default admin</small>
+      <button class="btn btn-danger" onclick="resetSystem()" aria-label="Reset the entire system" aria-describedby="reset-desc" title="Clears all users and recreates default admin" role="button">Reset System</button>
+      <small id="reset-desc" class="text-muted d-block mt-2">Clears all users and recreates default admin</small>
     </div>
   </div>
 
@@ -53,9 +53,9 @@
               </td>
               <td>
                 {% if u.username != user.get('username') %}
-                  <button class="btn btn-sm btn-danger" onclick="deleteUser('{{ u.username }}')">Delete</button>
+                  <button class="btn btn-sm btn-danger" onclick="deleteUser('{{ u.username }}')" aria-label="Delete user {{ u.username }}">Delete</button>
                 {% else %}
-                  <span class="text-muted">(You)</span>
+                  <span class="text-muted" aria-label="This is your account">(You)</span>
                 {% endif %}
               </td>
             </tr>

@@ -53,7 +53,7 @@ jobs:
           AXE_SCORE_THRESHOLD: '90'
           AXE_FAIL_ON_CRITICAL: 'true'
           # list pages to scan, comma-separated
-          PAGES: '/,/login,/register,/dashboard,/admin'
+          PAGES: '/,/login,/register,/dashboard,/admin,/logout'
           TARGET_URL: 'http://127.0.0.1:3000'
         run: |
           python phase2/flask_app/tools/accessibility_scorer.py

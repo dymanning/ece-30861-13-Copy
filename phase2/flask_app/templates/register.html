@@ -9,17 +9,17 @@
       <form method="post" action="{{ url_for('register') }}">
         <div class="mb-3">
           <label for="email" class="form-label">Email</label>
-          <input type="email" class="form-control" id="email" name="email" required>
+          <input type="email" class="form-control" id="email" name="email" required aria-label="Enter your email address" title="A valid email address for account recovery">
         </div>
         <div class="mb-3">
           <label for="username" class="form-label">Username</label>
-          <input type="text" class="form-control" id="username" name="username" required>
+          <input type="text" class="form-control" id="username" name="username" required aria-label="Choose a username for login" title="Your unique login username">
         </div>
         <div class="mb-3">
           <label for="password" class="form-label">Password</label>
-          <input type="password" class="form-control" id="password" name="password" required>
+          <input type="password" class="form-control" id="password" name="password" required aria-label="Create a secure password" title="A strong password to secure your account">
         </div>
-        <button class="btn btn-primary w-100" type="submit">Create account</button>
+        <button class="btn btn-primary w-100" type="submit" aria-label="Create a new account">Create account</button>
       </form>
     </div>
   </div>
