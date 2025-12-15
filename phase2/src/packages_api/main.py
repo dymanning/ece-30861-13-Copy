@@ -297,8 +297,8 @@ def list_artifacts(
 ):
     """Get the artifacts from the registry (BASELINE)"""
     # Pagination parameters
-    # page_size=100 required by autograder for upload tests
-    page_size = 100
+    # User requested page_size=30
+    page_size = 30
     current_offset = int(offset) if offset and offset.isdigit() else 0
     
     # Fetch enough items to cover the requested page + buffer
