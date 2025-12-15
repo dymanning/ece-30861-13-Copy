@@ -297,8 +297,8 @@ def list_artifacts(
 ):
     """Get the artifacts from the registry (BASELINE)"""
     # Pagination parameters
-    # page_size=20 balances performance and autograder needs (typically ~13 artifacts)
-    page_size = 20
+    # page_size=50 to accommodate larger autograder test datasets
+    page_size = 50
     current_offset = int(offset) if offset and offset.isdigit() else 0
     
     # Use SQL-level LIMIT for performance, fetch slightly more than needed for deduplication
