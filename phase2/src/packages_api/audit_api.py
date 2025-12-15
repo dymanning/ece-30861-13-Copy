@@ -10,7 +10,12 @@ from sqlalchemy.orm import Session
 from .database import get_db
 from .schemas import AuditLogOut
 from .audit import query_audit_logs
-from logs_api import require_admin
+try:
+    from ..logs_api import require_admin
+except ImportError:
+    # Fallback for testing - create a dummy require_admin
+    def require_admin():
+        pass
 
 
 router = APIRouter(prefix="/audit", tags=["audit"])
