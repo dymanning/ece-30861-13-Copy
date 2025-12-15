@@ -82,7 +82,7 @@ export class ArtifactsService {
           conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
         queryParts.push(`
-          SELECT id, name, type
+          SELECT DISTINCT id, name, type, uri, size, rating, cost, dependencies, metadata
           FROM artifacts
           ${whereClause}
         `);
@@ -138,7 +138,7 @@ export class ArtifactsService {
       // SQL query with PostgreSQL regex operator
       // Search in both name and readme fields
       const sql = `
-        SELECT id, name, type
+        SELECT DISTINCT id, name, type, uri, size, rating, cost, dependencies, metadata
         FROM artifacts
         WHERE 
           name ~* $1
@@ -185,17 +185,17 @@ export class ArtifactsService {
    * Returns all artifacts with matching name
    * 
    * @param name - Exact artifact name
-   * @returns Array of simple artifact metadata (name, id, type)
+   * @returns Array of full artifact metadata
    */
-  async searchByName(name: string): Promise<SimpleArtifactMetadata[]> {
+  async searchByName(name: string): Promise<ArtifactMetadata[]> {
     try {
       // Ensure name is properly decoded (controller should pass decoded, but be defensive)
       const decodedName = typeof name === 'string' ? name : String(name);
       
       const sql = `
-        SELECT id, name, type
+        SELECT id, name, type, uri, size, rating, cost, dependencies, metadata
         FROM artifacts
-        WHERE LOWER(name) = LOWER($1)
+        WHERE name = $1
         ORDER BY created_at DESC, id
       `;
 
@@ -210,8 +210,8 @@ export class ArtifactsService {
         throw new NotFoundError('No such artifact');
       }
 
-      // Return simple ArtifactMetadata per OpenAPI spec (only name, id, type)
-      return result.rows.map(row => this.toSimpleArtifactMetadata(row));
+      // Return full ArtifactMetadata per OpenAPI spec
+      return result.rows.map(row => this.toArtifactMetadata(row));
     } catch (error) {
       if (error instanceof NotFoundError) {
         throw error;
