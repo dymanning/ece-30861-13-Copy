@@ -1,6 +1,7 @@
 import os
 import sys
-from sqlalchemy import create_engine, Column, Integer, String, DateTime, Boolean, JSON
+import re
+from sqlalchemy import create_engine, Column, Integer, String, DateTime, Boolean, JSON, event
 from sqlalchemy.orm import sessionmaker, declarative_base
 from sqlalchemy.pool import StaticPool, NullPool
 from sqlalchemy.sql import func
@@ -44,6 +45,24 @@ if DATABASE_URL.startswith("sqlite"):
         )
 else:
     engine = create_engine(DATABASE_URL)
+
+# Register REGEXP function for SQLite
+@event.listens_for(engine, "connect")
+def connect(dbapi_connection, connection_record):
+    if DATABASE_URL.startswith("sqlite"):
+        def regexp(expr, item):
+            if item is None:
+                return False
+            try:
+                reg = re.compile(expr)
+                return reg.search(item) is not None
+            except Exception:
+                return False
+        
+        # Check if create_function exists (it should for sqlite3 connection)
+        if hasattr(dbapi_connection, "create_function"):
+            dbapi_connection.create_function("REGEXP", 2, regexp)
+
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 

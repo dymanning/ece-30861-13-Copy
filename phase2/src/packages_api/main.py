@@ -318,7 +318,8 @@ def list_artifacts(
         
         # Fetch all matching artifacts - no artificial limit
         # Order by name and id for consistent results
-        artifacts = q.order_by(Artifact.name, Artifact.id).all()
+        # Optimize: Select only needed columns
+        artifacts = q.with_entities(Artifact.id, Artifact.name, Artifact.artifact_type).order_by(Artifact.name, Artifact.id).all()
         
         for art in artifacts:
             if art.id not in seen_ids:
@@ -372,54 +373,32 @@ def search_by_regex(
 ):
     """Get artifacts matching regex (BASELINE)"""
     try:
-        # Use re.search behavior (match anywhere) instead of re.match (match from start)
-        # The spec says "Search for an artifact using regular expression"
-        pattern = re.compile(body.regex)
+        # Validate regex
+        re.compile(body.regex)
     except re.error:
         raise HTTPException(status_code=400, detail="Invalid regex pattern")
     
-    all_artifacts = db.query(Artifact).all()
-    matches = []
-    seen_ids = set()  # Prevent duplicates
+    # Use DB-side regex for performance
+    if engine.dialect.name == 'postgresql':
+        op_name = "~*"
+    else:
+        op_name = "REGEXP"
+        
+    # Select only needed columns to avoid fetching large readme/metadata
+    results = db.query(Artifact.id, Artifact.name, Artifact.artifact_type).filter(
+        or_(
+            Artifact.name.op(op_name)(body.regex),
+            Artifact.readme.op(op_name)(body.regex)
+        )
+    ).all()
     
-    def safe_regex_search(pattern, text, timeout_seconds=1):
-        """Perform regex search with timeout protection against catastrophic backtracking"""
-        if not text:
-            return None
-        # Limit text length to prevent extremely long matches
-        text = text[:10000] if len(text) > 10000 else text
-        try:
-            return pattern.search(text)
-        except Exception:
-            return None
-    
-    for art in all_artifacts:
-        if art.id in seen_ids:
-            continue
-            
-        # Check name first (with protection)
-        if safe_regex_search(pattern, art.name):
-            matches.append({
-                "name": art.name,
-                "id": art.id,
-                "type": art.artifact_type
-            })
-            seen_ids.add(art.id)
-            continue
-            
-        # Check readme if it exists and name didn't match (with protection)
-        if art.readme and safe_regex_search(pattern, art.readme):
-            matches.append({
-                "name": art.name,
-                "id": art.id,
-                "type": art.artifact_type
-            })
-            seen_ids.add(art.id)
-    
-    if not matches:
+    if not results:
         raise HTTPException(status_code=404, detail="No artifact found under this regex.")
     
-    return matches
+    return [
+        {"name": r.name, "id": r.id, "type": r.artifact_type}
+        for r in results
+    ]
 
 
 @app.get("/artifact/model/{artifact_id}/rate")
