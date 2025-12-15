@@ -13,7 +13,7 @@ DROP TABLE IF EXISTS users CASCADE;
 -- ============================================
 CREATE TABLE artifacts (
     -- Primary identifier
-    id SERIAL PRIMARY KEY,
+    id VARCHAR(255) PRIMARY KEY,
     
     -- Artifact metadata
     name VARCHAR(255) NOT NULL,
@@ -163,7 +163,7 @@ $$ LANGUAGE plpgsql;
 -- ============================================
 CREATE TABLE monitoring_history (
     id SERIAL PRIMARY KEY,
-    artifact_id VARCHAR(50) NOT NULL,
+    artifact_id VARCHAR(255) NOT NULL,
     
     -- Execution details
     executed_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),

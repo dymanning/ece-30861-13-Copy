@@ -8,6 +8,7 @@ import {
   RatingMetrics,
   ArtifactCost,
   ArtifactLineageGraph,
+  SimpleArtifactMetadata,
 } from '../types/artifacts.types';
 import { config } from '../config/config';
 import { logger } from '../utils/logger';
@@ -33,12 +34,12 @@ export class ArtifactsService {
    * 
    * @param queries - Array of artifact queries
    * @param pagination - Pagination parameters
-   * @returns Array of artifact metadata
+   * @returns Array of simple artifact metadata (name, id, type)
    */
   async enumerateArtifacts(
     queries: ArtifactQuery[],
     pagination: PaginationParams
-  ): Promise<ArtifactMetadata[]> {
+  ): Promise<SimpleArtifactMetadata[]> {
     try {
       // Validate input
       if (!queries || queries.length === 0) {
@@ -63,8 +64,8 @@ export class ArtifactsService {
           // Wildcard: match all artifacts
           // No name condition needed
         } else {
-          // Exact name match
-          conditions.push(`name = $${paramIndex}`);
+          // Exact name match (case-insensitive)
+          conditions.push(`LOWER(name) = LOWER($${paramIndex})`);
           params.push(query.name);
           paramIndex++;
         }
@@ -97,7 +98,7 @@ export class ArtifactsService {
         OFFSET $${paramIndex + 1}
       `;
 
-      params.push(pagination.limit + 1); // Fetch one extra to detect more pages
+      params.push(pagination.limit); // limit already includes +1 from controller
       params.push(pagination.offset);
 
       logger.debug('Enumerate artifacts query', {
@@ -114,8 +115,8 @@ export class ArtifactsService {
         return [];
       }
 
-      // Return fully populated ArtifactMetadata (all required fields)
-      return result.rows.map(row => this.toArtifactMetadata(row));
+      // Return simple ArtifactMetadata per OpenAPI spec (only name, id, type)
+      return result.rows.map(row => this.toSimpleArtifactMetadata(row));
     } catch (error) {
       if (error instanceof BadRequestError) {
         throw error;
@@ -130,9 +131,9 @@ export class ArtifactsService {
    * Searches both name and README content
    * 
    * @param pattern - Regex pattern (already validated)
-   * @returns Array of matching artifact metadata
+   * @returns Array of simple artifact metadata (name, id, type)
    */
-  async searchByRegex(pattern: string): Promise<ArtifactMetadata[]> {
+  async searchByRegex(pattern: string): Promise<SimpleArtifactMetadata[]> {
     try {
       // SQL query with PostgreSQL regex operator
       // Search in both name and readme fields
@@ -165,11 +166,11 @@ export class ArtifactsService {
 
       // Return empty array if no matches (spec-compliant: 200 with empty array)
       if (result.rowCount === 0) {
-        return [];
+        throw new NotFoundError('No artifact found under this regex');
       }
 
-      // Return fully populated ArtifactMetadata
-      return result.rows.map(row => this.toArtifactMetadata(row));
+      // Return simple ArtifactMetadata per OpenAPI spec (only name, id, type)
+      return result.rows.map(row => this.toSimpleArtifactMetadata(row));
     } catch (error) {
       if (error instanceof NotFoundError) {
         throw error;
@@ -184,9 +185,9 @@ export class ArtifactsService {
    * Returns all artifacts with matching name
    * 
    * @param name - Exact artifact name
-   * @returns Array of matching artifact metadata
+   * @returns Array of simple artifact metadata (name, id, type)
    */
-  async searchByName(name: string): Promise<ArtifactMetadata[]> {
+  async searchByName(name: string): Promise<SimpleArtifactMetadata[]> {
     try {
       // Ensure name is properly decoded (controller should pass decoded, but be defensive)
       const decodedName = typeof name === 'string' ? name : String(name);
@@ -194,7 +195,7 @@ export class ArtifactsService {
       const sql = `
         SELECT id, name, type, uri, size, rating, cost, dependencies, metadata
         FROM artifacts
-        WHERE name = $1
+        WHERE LOWER(name) = LOWER($1)
         ORDER BY created_at DESC, id
       `;
 
@@ -206,11 +207,11 @@ export class ArtifactsService {
 
       // Return empty array if no matches (spec-compliant: 200 with empty array)
       if (result.rowCount === 0) {
-        return [];
+        throw new NotFoundError('No such artifact');
       }
 
-      // Return fully populated ArtifactMetadata
-      return result.rows.map(row => this.toArtifactMetadata(row));
+      // Return simple ArtifactMetadata per OpenAPI spec (only name, id, type)
+      return result.rows.map(row => this.toSimpleArtifactMetadata(row));
     } catch (error) {
       if (error instanceof NotFoundError) {
         throw error;
@@ -310,7 +311,7 @@ export class ArtifactsService {
     const sql = `
       SELECT id, name, type, url, uri, size, rating, cost, dependencies, metadata
       FROM artifacts 
-      WHERE id = $1 AND type = $2
+      WHERE id = $1 AND LOWER(type) = LOWER($2)
     `;
     const result = await db.query<ArtifactEntity>(sql, [id, artifact_type]);
     if (result.rowCount === 0) {
@@ -335,7 +336,7 @@ export class ArtifactsService {
       UPDATE artifacts 
       SET url = $1,
           updated_at = NOW() 
-      WHERE id = $2 AND type = $3
+      WHERE id = $2 AND LOWER(type) = LOWER($3)
     `;
     
     const result = await db.query(sql, [
@@ -354,13 +355,7 @@ export class ArtifactsService {
    * Works for all types: model, dataset, code
    */
   async deleteArtifact(artifact_type: string, id: string): Promise<void> {
-    // Validate type for consistency
-    const validTypes = ['model', 'dataset', 'code'];
-    if (!validTypes.includes(artifact_type)) {
-      throw new BadRequestError(`Invalid artifact type: ${artifact_type}`);
-    }
-
-    const sql = `DELETE FROM artifacts WHERE id = $1 AND type = $2`;
+    const sql = `DELETE FROM artifacts WHERE id = $1 AND LOWER(type) = LOWER($2)`;
     const result = await db.query(sql, [id, artifact_type]);
     if (result.rowCount === 0) {
       throw new NotFoundError('Artifact does not exist');
@@ -592,28 +587,29 @@ export class ArtifactsService {
    */
   async estimateResultCount(queries: ArtifactQuery[]): Promise<number> {
     try {
-      // Simple estimation: if any query has wildcard, return total count
-      const hasWildcard = queries.some((q) => q.name === '*');
-
-      if (hasWildcard) {
-        return await this.getTotalCount();
-      }
-
-      // For specific queries, estimate based on name matches
-      // This is a rough estimate - actual implementation could be more sophisticated
       let estimatedTotal = 0;
 
       for (const query of queries) {
-        const sql = `
-          SELECT COUNT(*) as count
-          FROM artifacts
-          WHERE name = $1
-          ${query.types && query.types.length > 0 ? 'AND type = ANY($2::text[])' : ''}
-        `;
-
-        const params: any[] = [query.name];
-        if (query.types && query.types.length > 0) {
-          params.push(query.types);
+        let sql: string;
+        const params: any[] = [];
+        
+        if (query.name === '*') {
+          // Wildcard query - count with optional type filter
+          if (query.types && query.types.length > 0) {
+            sql = `SELECT COUNT(*) as count FROM artifacts WHERE type = ANY($1::text[])`;
+            params.push(query.types);
+          } else {
+            sql = `SELECT COUNT(*) as count FROM artifacts`;
+          }
+        } else {
+          // Specific name query
+          sql = `SELECT COUNT(*) as count FROM artifacts WHERE LOWER(name) = LOWER($1)`;
+          params.push(query.name);
+          
+          if (query.types && query.types.length > 0) {
+            sql += ` AND type = ANY($${params.length + 1}::text[])`;
+            params.push(query.types);
+          }
         }
 
         const result = await db.query<{ count: string }>(sql, params);
@@ -667,6 +663,18 @@ export class ArtifactsService {
   }
 
 
+
+  /**
+   * Convert database entity to simple ArtifactMetadata for enumeration endpoints
+   * Per OpenAPI spec, only includes name, id, type
+   */
+  private toSimpleArtifactMetadata(entity: ArtifactEntity): SimpleArtifactMetadata {
+    return {
+      name: entity.name,
+      id: entity.id,
+      type: entity.type as 'model' | 'dataset' | 'code',
+    };
+  }
 
   /**
    * Convert database entity to OpenAPI-compliant ArtifactMetadata

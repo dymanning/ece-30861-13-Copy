@@ -49,6 +49,15 @@ export const config: AppConfig = {
   features: {
     enableBedrock: process.env.ENABLE_BEDROCK === 'true',
   },
+  upload: {
+    // Maximum allowed upload size for artifact payloads (bytes)
+    maxBytes: parseInt(process.env.MAX_UPLOAD_BYTES || '209715200', 10), // 200MB
+    // Rate limit configuration per IP
+    rateLimit: {
+      windowMs: parseInt(process.env.UPLOAD_WINDOW_MS || '60000', 10), // 1 minute
+      max: parseInt(process.env.UPLOAD_MAX_REQUESTS || '30', 10), // 30 requests/min
+    },
+  },
 };
 
 /**
