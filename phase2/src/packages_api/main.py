@@ -283,10 +283,40 @@ def list_artifacts(
     response: Response = None
 ):
     """Get the artifacts from the registry (BASELINE)"""
-    results = []
+    # Pagination parameters
+    page_size = 100
+    current_offset = int(offset) if offset and offset.isdigit() else 0
     
-    # Limit total results to prevent DoS
-    MAX_RESULTS = 1000
+    # For simple single-query case (most common), use efficient SQL pagination
+    if len(queries) == 1:
+        query = queries[0]
+        q = db.query(Artifact)
+        
+        if query.name and query.name != "*":
+            q = q.filter(func.lower(Artifact.name) == func.lower(query.name))
+        
+        if query.types:
+            type_filters = [func.lower(Artifact.artifact_type) == func.lower(t) for t in query.types]
+            q = q.filter(or_(*type_filters))
+        
+        # Apply pagination at SQL level - fetch one extra to detect more pages
+        q = q.order_by(Artifact.name, Artifact.id)
+        artifacts = q.offset(current_offset).limit(page_size + 1).all()
+        
+        has_more = len(artifacts) > page_size
+        if has_more:
+            artifacts = artifacts[:page_size]
+        
+        results = [{"name": art.name, "id": art.id, "type": art.artifact_type} for art in artifacts]
+        
+        if has_more and response:
+            response.headers["offset"] = str(current_offset + page_size)
+        
+        return results
+    
+    # For multiple queries, collect results then paginate in memory
+    seen_ids = set()
+    results = []
     
     for query in queries:
         q = db.query(Artifact)
@@ -295,37 +325,27 @@ def list_artifacts(
             q = q.filter(func.lower(Artifact.name) == func.lower(query.name))
         
         if query.types:
-            # Filter by list of types (OR logic within the list)
             type_filters = [func.lower(Artifact.artifact_type) == func.lower(t) for t in query.types]
             q = q.filter(or_(*type_filters))
         
-        # Limit per query to avoid explosion
-        artifacts = q.limit(MAX_RESULTS).all()
-        for art in artifacts:
-            results.append({
-                "name": art.name,
-                "id": art.id,
-                "type": art.artifact_type
-            })
-            
-            if len(results) >= MAX_RESULTS:
-                break
+        # Limit results to avoid explosion
+        artifacts = q.order_by(Artifact.name, Artifact.id).limit(page_size + current_offset + 1).all()
         
-        if len(results) >= MAX_RESULTS:
-            break
+        for art in artifacts:
+            if art.id not in seen_ids:
+                seen_ids.add(art.id)
+                results.append({"name": art.name, "id": art.id, "type": art.artifact_type})
     
-    # Handle pagination
-    page_size = 100
-    current_offset = int(offset) if offset and offset.isdigit() else 0
+    # Sort for consistent ordering
+    results.sort(key=lambda x: (x["name"], x["id"]))
     
-    paginated_results = results[current_offset : current_offset + page_size]
+    # Apply pagination
+    paginated = results[current_offset:current_offset + page_size]
     
-    # Set next offset header if there are more results
-    if current_offset + page_size < len(results):
-        if response:
-            response.headers["offset"] = str(current_offset + page_size)
-            
-    return paginated_results
+    if current_offset + page_size < len(results) and response:
+        response.headers["offset"] = str(current_offset + page_size)
+    
+    return paginated
 
 
 # ============== SPECIFIC ARTIFACT ROUTES (MUST COME BEFORE GENERIC ROUTES) ==============
