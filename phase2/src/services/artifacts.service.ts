@@ -228,26 +228,30 @@ export class ArtifactsService {
     if (!data || !data.url) {
       throw new BadRequestError('artifact_data must include url');
     }
-    // Derive name from URL segment
-    let url = data.url;
-    // Remove trailing slash
-    if (url.endsWith('/')) {
-      url = url.slice(0, -1);
-    }
-    // Remove .git suffix
-    if (url.endsWith('.git')) {
-      url = url.slice(0, -4);
-    }
+    // Derive name from URL segment or use provided name
+    let derivedName = data.name;
+    
+    if (!derivedName) {
+      let url = data.url;
+      // Remove trailing slash
+      if (url.endsWith('/')) {
+        url = url.slice(0, -1);
+      }
+      // Remove .git suffix
+      if (url.endsWith('.git')) {
+        url = url.slice(0, -4);
+      }
 
-    const urlParts = url.split('/').filter(Boolean);
-    let derivedName = urlParts[urlParts.length - 1] || 'unknown-artifact';
+      const urlParts = url.split('/').filter(Boolean);
+      derivedName = urlParts[urlParts.length - 1] || 'unknown-artifact';
 
-    // Remove common archive extensions
-    const extensions = ['.zip', '.tar.gz', '.tgz', '.tar'];
-    for (const ext of extensions) {
-      if (derivedName.endsWith(ext)) {
-        derivedName = derivedName.slice(0, -ext.length);
-        break;
+      // Remove common archive extensions
+      const extensions = ['.zip', '.tar.gz', '.tgz', '.tar'];
+      for (const ext of extensions) {
+        if (derivedName.endsWith(ext)) {
+          derivedName = derivedName.slice(0, -ext.length);
+          break;
+        }
       }
     }
 
