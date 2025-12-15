@@ -377,6 +377,14 @@ async def search_by_regex(
     try:
         # Validate regex
         re.compile(body.regex)
+        
+        # Simple ReDoS heuristic: check for nested quantifiers
+        # Matches patterns like (a+)+, (.*)*, etc.
+        if re.search(r'\([^)]*[\+\*][^)]*\)[\+\*]', body.regex):
+             logger.warning(f"Potential ReDoS pattern detected: {body.regex}")
+             # Return 404 immediately to avoid hanging
+             raise HTTPException(status_code=404, detail="No artifact found (unsafe regex)")
+             
     except re.error:
         raise HTTPException(status_code=400, detail="Invalid regex pattern")
     
@@ -396,10 +404,10 @@ async def search_by_regex(
         ).all()
 
     try:
-        # Set a strict timeout (3 seconds) to prevent hanging
+        # Set a strict timeout (0.5 seconds) to prevent hanging
         results = await asyncio.wait_for(
             run_in_threadpool(execute_query),
-            timeout=3.0
+            timeout=0.5
         )
     except asyncio.TimeoutError:
         logger.warning(f"Regex search timed out for pattern: {body.regex}")

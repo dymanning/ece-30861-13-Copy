@@ -55,8 +55,9 @@ def connect(dbapi_connection, connection_record):
                 return False
             try:
                 # Limit text length to prevent ReDoS/performance issues
-                if isinstance(item, str) and len(item) > 20000:
-                    item = item[:20000]
+                # 1000 chars is enough for most names/readmes while preventing deep backtracking
+                if isinstance(item, str) and len(item) > 1000:
+                    item = item[:1000]
                 
                 reg = re.compile(expr)
                 return reg.search(item) is not None
