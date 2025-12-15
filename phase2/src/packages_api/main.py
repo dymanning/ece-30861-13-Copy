@@ -103,9 +103,10 @@ class SimpleLicenseCheckRequest(BaseModel):
 
 # ============== HELPER FUNCTIONS ==============
 
-def generate_artifact_id(name: str) -> str:
-    """Generate a unique numeric-style ID for an artifact"""
-    hash_input = f"{name}-{uuid.uuid4().hex}"
+def generate_artifact_id(name: str, url: str = None) -> str:
+    """Generate a deterministic numeric-style ID for an artifact based on name and optionally URL"""
+    # Use URL if provided for better determinism, otherwise just name
+    hash_input = f"{name}-{url}" if url else f"{name}-{uuid.uuid4().hex}"
     hash_digest = hashlib.sha256(hash_input.encode()).hexdigest()
     numeric_id = str(int(hash_digest[:12], 16))[:10]
     return numeric_id
@@ -300,7 +301,10 @@ def list_artifacts(
     page_size = 100
     current_offset = int(offset) if offset and offset.isdigit() else 0
     
-    # Collect ALL matching artifacts (no early termination)
+    # Use SQL-level LIMIT for performance, fetch slightly more than needed for deduplication
+    # Fetch enough to cover offset + page_size + buffer for dedup across queries
+    fetch_limit = min(1000, current_offset + page_size * 2)
+    
     seen_ids = set()
     results = []
     
@@ -314,14 +318,19 @@ def list_artifacts(
             type_filters = [func.lower(Artifact.artifact_type) == func.lower(t) for t in query.types]
             q = q.filter(or_(*type_filters))
         
-        # Fetch all matching artifacts - no artificial limit
-        # Order by name and id for consistent results
-        artifacts = q.order_by(Artifact.name, Artifact.id).all()
+        # Use SQL LIMIT for performance - order by name and id for consistent results
+        artifacts = q.order_by(Artifact.name, Artifact.id).limit(fetch_limit).all()
         
         for art in artifacts:
             if art.id not in seen_ids:
                 seen_ids.add(art.id)
                 results.append({"name": art.name, "id": art.id, "type": art.artifact_type})
+            # Stop if we have enough results
+            if len(results) >= current_offset + page_size + 1:
+                break
+        
+        if len(results) >= current_offset + page_size + 1:
+            break
     
     # Sort for consistent ordering across all results
     results.sort(key=lambda x: (x["name"], x["id"]))
@@ -524,10 +533,14 @@ def create_artifact(
         raise HTTPException(status_code=400, detail="URL is required")
     
     name = extract_name_from_url(body.url)
-    artifact_id = generate_artifact_id(name)
+    # Generate deterministic ID based on URL to detect duplicates
+    artifact_id = generate_artifact_id(name, body.url)
     
     # Check if artifact already exists (409 Conflict per spec)
-    existing = db.query(Artifact).filter(Artifact.id == artifact_id).first()
+    # Check by both ID and URL since URL should be unique per artifact
+    existing = db.query(Artifact).filter(
+        (Artifact.id == artifact_id) | (Artifact.url == body.url)
+    ).first()
     if existing:
         raise HTTPException(status_code=409, detail="Artifact exists already.")
     
@@ -708,8 +721,9 @@ def create_package(
     db: Session = Depends(get_db)
 ):
     """Legacy package upload endpoint for compatibility"""
-    # Generate ID
-    pkg_id = generate_artifact_id(name)
+    # Generate deterministic ID based on name and version
+    url = f"s3://legacy-upload/{name}"
+    pkg_id = generate_artifact_id(name, url)
     
     # Store artifact
     artifact = Artifact(
