@@ -36,6 +36,15 @@ export function validateRegexPattern(pattern: string): void {
       'Unsafe regex pattern detected. Pattern may cause performance issues (ReDoS).'
     );
   }
+
+  // Additional ReDoS protection for patterns safe-regex might miss
+  // Check for quantified alternations: (a|b)+ or (a|b)*
+  // This catches patterns like (a|aa)+ which cause exponential backtracking
+  if (/\([^)]*\|[^)]*\)[+*]/.test(pattern)) {
+    throw new Error(
+      'Unsafe regex pattern detected. Quantified alternations are not allowed.'
+    );
+  }
 }
 
 /**
