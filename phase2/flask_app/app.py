@@ -37,8 +37,24 @@ def get_db_path() -> str:
 
 def get_db_connection():
     path = get_db_path()
+    os.makedirs(os.path.dirname(path), exist_ok=True)
     conn = sqlite3.connect(path)
     conn.row_factory = sqlite3.Row
+    # Ensure schema is initialized
+    try:
+        cur = conn.cursor()
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS verifiedUsers (
+                userID INTEGER PRIMARY KEY AUTOINCREMENT,
+                email TEXT UNIQUE NOT NULL,
+                username TEXT UNIQUE NOT NULL,
+                password TEXT NOT NULL,
+                is_admin INTEGER DEFAULT 0
+            )
+        """)
+        conn.commit()
+    except Exception:
+        pass  # Table may already exist
     return conn
 
 
@@ -53,6 +69,18 @@ def verify_token() -> dict | None:
     """Attempt to verify token by calling the configured verify endpoint.
     Returns user JSON on success, None on failure.
     """
+    token = session.get("token")
+    if not token:
+        return None
+    
+    # Handle local DB sessions (tokens starting with "db-session-")
+    if token.startswith("db-session-"):
+        user_data = session.get("user")
+        if user_data:
+            return user_data
+        return None
+    
+    # Handle JWT tokens from external API
     headers = get_auth_headers()
     if not headers:
         return None
@@ -92,16 +120,27 @@ def role_required(role: str):
                 flash("Please sign in to access that page.", "warning")
                 return redirect(url_for("login", next=request.path))
 
-            # roles may be a list or a single string
-            roles = user.get("roles") or user.get("role")
-            if roles is None:
-                flash("You do not have permission to access that page.", "danger")
-                return redirect(url_for("index"))
-
-            if isinstance(roles, str):
-                has_role = roles == role
+            # Check for admin role - support both local DB and external auth formats
+            # Local DB users have is_admin field, external auth may have roles/role
+            if role == "admin":
+                has_role = user.get("is_admin", False)
+                if not has_role:
+                    # Also check roles/role for external auth compatibility
+                    roles = user.get("roles") or user.get("role")
+                    if roles:
+                        if isinstance(roles, str):
+                            has_role = roles == role
+                        else:
+                            has_role = role in roles
             else:
-                has_role = role in roles
+                # For non-admin roles, check roles/role fields
+                roles = user.get("roles") or user.get("role")
+                if roles is None:
+                    has_role = False
+                elif isinstance(roles, str):
+                    has_role = roles == role
+                else:
+                    has_role = role in roles
 
             if not has_role:
                 flash("You do not have permission to access that page.", "danger")
@@ -112,6 +151,59 @@ def role_required(role: str):
         return wrapper
 
     return decorator
+
+
+def ensure_default_admin_user():
+    """Create/ensure default admin user exists in local DB"""
+    DEFAULT_USERNAME = "ece30861defaultadminuser"
+    DEFAULT_PASSWORD = "'correcthorsebatterystaple123(!__+@**(A;DROP TABLE packages'"
+    
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        
+        # Check if default admin already exists
+        cur.execute("SELECT userID FROM verifiedUsers WHERE username = ?", (DEFAULT_USERNAME,))
+        if cur.fetchone():
+            conn.close()
+            return
+        
+        # Create default admin user
+        hashed = generate_password_hash(DEFAULT_PASSWORD)
+        cur.execute(
+            "SELECT MAX(userID) as mx FROM verifiedUsers"
+        )
+        row = cur.fetchone()
+        next_id = (row["mx"] or 0) + 1
+        
+        cur.execute(
+            "INSERT INTO verifiedUsers (userID, username, email, password, is_admin) VALUES (?, ?, ?, ?, ?)",
+            (next_id, DEFAULT_USERNAME, f"{DEFAULT_USERNAME}@system.local", hashed, 1)
+        )
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        print(f"Warning: Could not ensure default admin user: {e}")
+
+
+@app.route("/system/reset", methods=["POST"])
+def system_reset():
+    """Reset system to initial state (clears users, recreates default admin)"""
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        
+        # Clear users
+        cur.execute("DELETE FROM verifiedUsers")
+        conn.commit()
+        conn.close()
+        
+        # Recreate default admin
+        ensure_default_admin_user()
+        
+        return {"status": "ok", "message": "System reset successfully"}, 200
+    except Exception as e:
+        return {"status": "error", "message": str(e)}, 500
 
 
 @app.route("/")
@@ -131,14 +223,14 @@ def login():
             # match by email or username
             cur.execute(
                 "SELECT * FROM verifiedUsers WHERE username = ?",
-                (user)
+                (user,)
             )
             row = cur.fetchone()
             conn.close()
             if row:
                 stored = row["password"]
                 # support both hashed and plaintext stored passwords
-                if stored and (stored.startswith("pbkdf2:") or stored.startswith("sha256$")):
+                if stored and (stored.startswith("pbkdf2:") or stored.startswith("sha256$") or stored.startswith("scrypt:")):
                     ok = check_password_hash(stored, password)
                 else:
                     ok = stored == password
@@ -146,17 +238,20 @@ def login():
                 if ok:
                     # store minimal session info; keep the token key for compatibility
                     session["token"] = "db-session-" + str(row["userID"])
-                    session["user"] = {"userID": row["userID"], "email": row["email"], "username": row["username"]}
+                    session["user"] = {"userID": row["userID"], "email": row["email"], "username": row["username"], "is_admin": bool(row["is_admin"])}
                     flash("Logged in successfully (local DB).", "success")
                     next_url = request.args.get("next") or url_for("dashboard")
                     return redirect(next_url)
                 else:
-                    flash("Login failed. Check credentials.", "danger")
+                    # Password mismatch
+                    flash("Invalid username or password.", "danger")
             else:
                 # no local user found
-                flash("Login failed. Check credentials.", "danger")
-        except sqlite3.Error:
-            flash("Unable to reach auth server.", "danger")
+                flash("Invalid username or password.", "danger")
+        except sqlite3.Error as e:
+            # Server-side database error
+            flash("A server error occurred. Please try again later.", "danger")
+            app.logger.error(f"Database error during login: {e}")
             return render_template("login.html")
     return render_template("login.html")
 
@@ -209,14 +304,69 @@ def logout():
 @login_required
 def dashboard():
     user = verify_token()
-    return render_template("dashboard.html", user=user)
+    
+    # Fetch all models from TypeScript API
+    models = []
+    try:
+        headers = {"X-Authorization": session.get("token", "")}
+        resp = requests.post(
+            "http://localhost:5000/artifacts",
+            headers=headers,
+            json=[{"type": "model"}],
+            timeout=5
+        )
+        if resp.status_code == 200:
+            models = resp.json()
+    except Exception as e:
+        app.logger.error(f"Error fetching models: {e}")
+    
+    return render_template("dashboard.html", user=user, models=models)
+
+
+@app.route("/model/<int:model_id>")
+@login_required
+def model_detail(model_id):
+    """Display detailed information about a specific model"""
+    user = verify_token()
+    model = None
+    
+    try:
+        headers = {"X-Authorization": session.get("token", "")}
+        resp = requests.get(
+            f"http://localhost:5000/artifacts/model/{model_id}",
+            headers=headers,
+            timeout=5
+        )
+        if resp.status_code == 200:
+            model = resp.json()
+        elif resp.status_code == 404:
+            flash("Model not found.", "warning")
+            return redirect(url_for("dashboard"))
+    except Exception as e:
+        app.logger.error(f"Error fetching model details: {e}")
+        flash("Could not load model details.", "warning")
+        return redirect(url_for("dashboard"))
+    
+    return render_template("model_detail.html", user=user, model=model)
 
 
 @app.route("/admin")
 @role_required("admin")
 def admin():
     user = verify_token()
-    return render_template("dashboard.html", user=user)
+    
+    # Fetch all users for admin panel
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        cur.execute("SELECT userID, username, email, is_admin FROM verifiedUsers ORDER BY username")
+        users = [dict(row) for row in cur.fetchall()]
+        conn.close()
+    except sqlite3.Error as e:
+        app.logger.error(f"Error fetching users: {e}")
+        users = []
+    
+    return render_template("admin.html", user=user, users=users)
 
 
 @app.errorhandler(404)
@@ -234,5 +384,7 @@ def server_error(err):
 
 
 if __name__ == "__main__":
+    # Ensure default admin user exists on startup
+    ensure_default_admin_user()
     # For local development only. Use a real WSGI server in production.
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 3000)), debug=True)

@@ -1,6 +1,19 @@
 import { Request, Response, NextFunction } from 'express';
 import { config } from '../config/config';
 import { logger } from '../utils/logger';
+import { AuthService } from '../services/auth.service';
+import { UserService } from '../services/user.service';
+import { Permission } from '../types/user.types';
+import { Pool } from 'pg';
+
+// Initialize services
+let authService: AuthService;
+let userService: UserService;
+
+export function initializeAuthServices(pool: Pool) {
+  authService = new AuthService(pool);
+  userService = new UserService(pool);
+}
 
 /**
  * Extended Request interface with user information
@@ -9,25 +22,20 @@ export interface AuthenticatedRequest extends Request {
   user?: {
     username: string;
     isAdmin: boolean;
+    permissions: Permission[];
   };
+  token?: string;
 }
 
 /**
  * Authentication middleware
- * Validates X-Authorization header
- * 
- * For Deliverable #1: Stub implementation
- * - If auth is disabled, always proceed
- * - If auth is enabled but not implemented, return 501
- * - If token is missing, return 403
- * 
- * For future: Implement JWT validation
+ * Validates X-Authorization header and tracks token usage
  */
-export function authenticate(
+export async function authenticate(
   req: AuthenticatedRequest,
   res: Response,
   next: NextFunction
-): void {
+): Promise<void> {
   const authHeader = req.get('X-Authorization');
 
   // If authentication is not enabled, allow all requests
@@ -41,18 +49,14 @@ export function authenticate(
   if (!authHeader) {
     logger.warn('Authentication failed: Missing X-Authorization header');
     res.status(403).json({
-      error: 'Authentication failed',
-      message: 'Missing X-Authorization header',
+      error: 'Authentication failed due to invalid or missing AuthenticationToken.',
     });
     return;
   }
 
-  // Stub: For Deliverable #1, accept any token format
-  // TODO: Implement JWT validation for future deliverables
-  
   try {
     // Extract token (handle both "Bearer token" and "token" formats)
-    const token = authHeader.startsWith('bearer ')
+    const token = authHeader.toLowerCase().startsWith('bearer ')
       ? authHeader.substring(7)
       : authHeader;
 
@@ -60,17 +64,38 @@ export function authenticate(
       throw new Error('Empty token');
     }
 
-    // TODO: Validate JWT token here
-    // For now, accept any non-empty token and set default user
+    // Validate token and get username
+    const username = await authService.validateToken(token);
+    
+    if (!username) {
+      res.status(403).json({
+        error: 'Authentication failed due to invalid or missing AuthenticationToken.',
+      });
+      return;
+    }
+
+    // Increment token usage count
+    await authService.incrementTokenUsage(token);
+
+    // Get user info
+    const user = await userService.findByUsername(username);
+    
+    if (!user) {
+      res.status(403).json({
+        error: 'Authentication failed due to invalid or missing AuthenticationToken.',
+      });
+      return;
+    }
+
+    // Attach user info to request
     req.user = {
-      username: 'ece30861defaultadminuser',
-      isAdmin: true,
+      username: user.username,
+      isAdmin: user.isAdmin,
+      permissions: user.permissions,
     };
+    req.token = token;
 
-    logger.debug('Authentication successful (stub)', {
-      username: req.user.username,
-    });
-
+    logger.debug('Authentication successful', { username });
     next();
   } catch (error) {
     logger.warn('Authentication failed:', {
@@ -78,61 +103,34 @@ export function authenticate(
     });
 
     res.status(403).json({
-      error: 'Authentication failed',
-      message: 'Invalid or malformed X-Authorization token',
+      error: 'Authentication failed due to invalid or missing AuthenticationToken.',
     });
-  }
-}
-import { verifyToken } from '../utils/auth.utils';
-
-export function authenticateToken(req: Request, res: Response, next: NextFunction) {
-  const authHeader = req.headers['authorization'];
-  const token = authHeader && authHeader.split(' ')[1];
-  if (!token) return res.status(401).json({ error: 'No token provided' });
-  try {
-    const user = verifyToken(token);
-    (req as any).user = user;
-    next();
-  } catch (err) {
-    return res.status(403).json({ error: 'Invalid or expired token' });
   }
 }
 
 /**
- * Optional authentication middleware
- * Attempts to authenticate but allows request to proceed even if it fails
- * Useful for endpoints that have different behavior for authenticated users
+ * Permission-based middleware factory
+ * Checks if user has the required permission
  */
-export function optionalAuthenticate(
-  req: AuthenticatedRequest,
-  res: Response,
-  next: NextFunction
-): void {
-  const authHeader = req.get('X-Authorization');
-
-  if (!authHeader || !config.auth.enabled) {
-    next();
-    return;
-  }
-
-  try {
-    const token = authHeader.startsWith('bearer ')
-      ? authHeader.substring(7)
-      : authHeader;
-
-    if (token) {
-      // TODO: Validate JWT token
-      req.user = {
-        username: 'ece30861defaultadminuser',
-        isAdmin: true,
-      };
+export function requirePermission(permission: Permission) {
+  return (req: AuthenticatedRequest, res: Response, next: NextFunction): void => {
+    if (!req.user) {
+      res.status(403).json({
+        error: 'Authentication failed due to invalid or missing AuthenticationToken.',
+      });
+      return;
     }
-  } catch (error) {
-    // Ignore authentication errors for optional auth
-    logger.debug('Optional authentication failed, proceeding anyway');
-  }
 
-  next();
+    // Admin permission grants all permissions
+    if (req.user.permissions.includes('admin') || req.user.permissions.includes(permission)) {
+      next();
+      return;
+    }
+
+    res.status(401).json({
+      error: 'You do not have permission to perform this action.',
+    });
+  };
 }
 
 /**
@@ -146,16 +144,14 @@ export function requireAdmin(
 ): void {
   if (!req.user) {
     res.status(403).json({
-      error: 'Authentication required',
-      message: 'This endpoint requires authentication',
+      error: 'Authentication failed due to invalid or missing AuthenticationToken.',
     });
     return;
   }
 
-  if (!req.user.isAdmin) {
+  if (!req.user.isAdmin && !req.user.permissions.includes('admin')) {
     res.status(401).json({
-      error: 'Unauthorized',
-      message: 'This endpoint requires admin privileges',
+      error: 'You do not have permission to perform this action.',
     });
     return;
   }

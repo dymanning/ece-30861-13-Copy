@@ -1,0 +1,127 @@
+{% extends 'base.html' %}
+
+{% block title %}Admin Dashboard{% endblock %}
+
+{% block content %}
+  <h2>Admin Dashboard</h2>
+  {% if user %}
+    <div class="alert alert-info mb-4">
+      <strong>Admin User:</strong> {{ user.get('username') or user.get('email') }}
+    </div>
+  {% endif %}
+
+  <!-- System Actions -->
+  <div class="card mb-4">
+    <div class="card-header">
+      <h4>System Actions</h4>
+    </div>
+    <div class="card-body">
+      <button class="btn btn-danger" onclick="resetSystem()" aria-label="Reset the entire system" aria-describedby="reset-desc" title="Clears all users and recreates default admin" role="button">Reset System</button>
+      <small id="reset-desc" class="text-muted d-block mt-2">Clears all users and recreates default admin</small>
+    </div>
+  </div>
+
+  <!-- User Management -->
+  <div class="card mb-4">
+    <div class="card-header">
+      <h4>User Management</h4>
+    </div>
+    <div class="card-body">
+      <table class="table table-striped">
+        <thead>
+          <tr>
+            <th>User ID</th>
+            <th>Username</th>
+            <th>Email</th>
+            <th>Admin</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% if users %}
+            {% for u in users %}
+            <tr>
+              <td>{{ u.userID }}</td>
+              <td>{{ u.username }}</td>
+              <td>{{ u.email }}</td>
+              <td>
+                {% if u.is_admin %}
+                  <span class="badge bg-success">Admin</span>
+                {% else %}
+                  <span class="badge bg-secondary">User</span>
+                {% endif %}
+              </td>
+              <td>
+                {% if u.username != user.get('username') %}
+                  <button class="btn btn-sm btn-danger" onclick="deleteUser('{{ u.username }}')" aria-label="Delete user {{ u.username }}">Delete</button>
+                {% else %}
+                  <span class="text-muted" aria-label="This is your account">(You)</span>
+                {% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+          {% else %}
+            <tr>
+              <td colspan="5" class="text-center text-muted">No users found</td>
+            </tr>
+          {% endif %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- System Statistics -->
+  <div class="card mb-4">
+    <div class="card-header">
+      <h4>System Statistics</h4>
+    </div>
+    <div class="card-body">
+      <div class="row">
+        <div class="col-md-6">
+          <h5>Total Users</h5>
+          <p class="display-4">{{ users|length if users else 0 }}</p>
+        </div>
+        <div class="col-md-6">
+          <h5>Admin Users</h5>
+          <p class="display-4">{{ users|selectattr('is_admin')|list|length if users else 0 }}</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    function resetSystem() {
+      if (!confirm('Are you sure you want to reset the system? This will delete all users except the default admin.')) {
+        return;
+      }
+      
+      fetch('/system/reset', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      })
+      .then(response => response.json())
+      .then(data => {
+        if (data.status === 'ok') {
+          alert('System reset successfully. You will be logged out.');
+          window.location.href = '/logout';
+        } else {
+          alert('Error: ' + data.message);
+        }
+      })
+      .catch(error => {
+        alert('Error: ' + error);
+      });
+    }
+
+    function deleteUser(username) {
+      if (!confirm('Are you sure you want to delete user: ' + username + '?')) {
+        return;
+      }
+      
+      // TODO: Implement delete user endpoint
+      alert('User deletion not yet implemented. This would delete: ' + username);
+    }
+  </script>
+{% endblock %}

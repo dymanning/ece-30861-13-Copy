@@ -2,6 +2,9 @@ import { createApp } from './app';
 import { db } from './config/database';
 import { config } from './config/config';
 import { logger } from './utils/logger';
+import { initializeAuthServices } from './middleware/auth.middleware';
+import { initializeAuthController } from './controllers/auth.controller';
+import { UserService } from './services/user.service';
 
 /**
  * Start the server
@@ -18,6 +21,16 @@ async function startServer() {
     }
 
     logger.info('Database connection successful');
+
+    // Initialize auth services with database pool
+    const pool = db.getPool();
+    initializeAuthServices(pool);
+    initializeAuthController(pool);
+
+    // Ensure default admin user exists
+    const userService = new UserService(pool);
+    await userService.ensureDefaultAdmin();
+    logger.info('Default admin user verified');
 
     // Create Express app
     const app = createApp();

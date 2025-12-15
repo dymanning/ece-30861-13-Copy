@@ -73,32 +73,46 @@ CREATE TABLE users (
     username VARCHAR(255) PRIMARY KEY,
     password_hash TEXT NOT NULL,
     is_admin BOOLEAN DEFAULT FALSE,
+    permissions TEXT[] DEFAULT ARRAY[]::TEXT[],  -- Array of permission strings
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- ============================================
+-- Authentication Tokens Table
+-- ============================================
+CREATE TABLE auth_tokens (
+    token TEXT PRIMARY KEY,
+    username VARCHAR(255) NOT NULL REFERENCES users(username) ON DELETE CASCADE,
+    usage_count INTEGER DEFAULT 0,
+    max_usage INTEGER DEFAULT 1000,  -- 1000 API interactions per spec
+    expires_at TIMESTAMP WITH TIME ZONE NOT NULL,  -- 10 hours from creation
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
 -- Insert default admin user per spec requirements
 -- Username: ece30861defaultadminuser
 -- Password: correcthorsebatterystaple123(!__+@**(A;DROP TABLE artifacts
--- Note: In production, hash this password properly. For now, using placeholder.
-INSERT INTO users (username, password_hash, is_admin) VALUES (
+-- Note: Hash will be generated at runtime in the application
+INSERT INTO users (username, password_hash, is_admin, permissions) VALUES (
     'ece30861defaultadminuser',
     'placeholder_hash_replace_with_actual_hash',
-    TRUE
+    TRUE,
+    ARRAY['admin', 'upload', 'search', 'download']
 );
 
 -- ============================================
 -- Indexes for Performance
 -- ============================================
 
--- Single-column indexes for basic queries
+-- Artifact indexes
 CREATE INDEX idx_artifacts_name ON artifacts(name);
 CREATE INDEX idx_artifacts_type ON artifacts(type);
-
--- Composite index for filtered enumeration queries
 CREATE INDEX idx_artifacts_name_type ON artifacts(name, type);
-
--- Index for pagination (ordered by creation time)
 CREATE INDEX idx_artifacts_created_at ON artifacts(created_at DESC);
+
+-- Auth token indexes
+CREATE INDEX idx_auth_tokens_username ON auth_tokens(username);
+CREATE INDEX idx_auth_tokens_expires_at ON auth_tokens(expires_at);
 
 -- Full-text search index (GIN) for regex search
 -- Combines name + README for comprehensive text search

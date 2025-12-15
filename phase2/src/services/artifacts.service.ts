@@ -224,7 +224,7 @@ export class ArtifactsService {
   /**
    * Create new artifact (spec: POST /artifact/{artifact_type})
    */
-  async createArtifact(artifact_type: string, data: { url: string }): Promise<Artifact> {
+  async createArtifact(artifact_type: string, data: { url: string; name?: string }): Promise<Artifact> {
     if (!data || !data.url) {
       throw new BadRequestError('artifact_data must include url');
     }

@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { artifactsController } from '../controllers/artifacts.controller';
-import { authenticate } from '../middleware/auth.middleware';
+import { authenticate, requirePermission } from '../middleware/auth.middleware';
 import { uploadRateLimiter } from '../middleware/rate.middleware';
 import { asyncHandler } from '../middleware/error.middleware';
 
@@ -30,6 +30,7 @@ const router = Router();
 router.post(
   '/artifact/:type',
   authenticate,
+  requirePermission('upload'),
   asyncHandler(async (req, res) => {
     await artifactsController.createArtifact(req, res);
   })
@@ -55,6 +56,7 @@ router.post(
 router.post(
   '/artifacts',
   authenticate,
+  requirePermission('search'),
   uploadRateLimiter,
   asyncHandler(async (req, res) => {
     await artifactsController.enumerateArtifacts(req, res);
@@ -82,6 +84,7 @@ router.post(
 router.post(
   '/artifact/byRegEx',
   authenticate,
+  requirePermission('search'),
   uploadRateLimiter,
   asyncHandler(async (req, res) => {
     await artifactsController.searchByRegex(req, res);
@@ -107,6 +110,7 @@ router.post(
 router.get(
   '/artifact/byName/:name',
   authenticate,
+  requirePermission('search'),
   asyncHandler(async (req, res) => {
     await artifactsController.searchByName(req, res);
   })
@@ -131,6 +135,7 @@ router.get(
 router.get(
   '/artifacts/:type/:id',
   authenticate,
+  requirePermission('download'),
   asyncHandler(async (req, res) => {
     await artifactsController.getArtifact(req, res);
   })
@@ -155,6 +160,7 @@ router.get(
 router.delete(
   '/artifacts/:type/:id',
   authenticate,
+  requirePermission('admin'),
   asyncHandler(async (req, res) => {
     await artifactsController.deleteArtifact(req, res);
   })
@@ -178,6 +184,7 @@ router.delete(
 router.get(
   '/artifact/model/:id/lineage',
   authenticate,
+  requirePermission('search'),
   asyncHandler(async (req, res) => {
     await artifactsController.getLineage(req, res);
   })

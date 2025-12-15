@@ -125,6 +125,14 @@ class Database {
   }
 
   /**
+   * Get the underlying pool instance
+   * Useful for services that need direct pool access
+   */
+  getPool(): Pool {
+    return this.pool;
+  }
+
+  /**
    * Get pool statistics
    */
   getStats() {
