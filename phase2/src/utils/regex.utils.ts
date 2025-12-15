@@ -38,9 +38,10 @@ export function validateRegexPattern(pattern: string): void {
   }
 
   // Additional ReDoS protection for patterns safe-regex might miss
-  // Check for quantified alternations: (a|b)+ or (a|b)*
+  // Check for quantified alternations: (a|b)+, (a|b)*, (a|b){1,}, etc.
   // This catches patterns like (a|aa)+ which cause exponential backtracking
-  if (/\([^)]*\|[^)]*\)[+*]/.test(pattern)) {
+  // We use a conservative heuristic: any group containing an alternation that is quantified
+  if (/\([^)]*\|[^)]*\)(?:[*+]|\{\d+(?:,\d*)?\})/.test(pattern)) {
     throw new Error(
       'Unsafe regex pattern detected. Quantified alternations are not allowed.'
     );
