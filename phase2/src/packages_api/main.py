@@ -26,10 +26,11 @@ from fastapi import (
     Body,
     File,
     UploadFile,
-    Form
+    Form,
+    Response
 )
 from fastapi.concurrency import run_in_threadpool
-from fastapi.responses import JSONResponse, Response
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
@@ -298,11 +299,11 @@ def reset_registry(
 
 @app.post("/artifacts")
 def list_artifacts(
+    response: Response,
     queries: List[ArtifactQuery] = Body(...),
     offset: Optional[str] = Query(None),
     x_authorization: Optional[str] = Header(None, alias="X-Authorization"),
-    db: Session = Depends(get_db),
-    response: Response = None
+    db: Session = Depends(get_db)
 ):
     """Get the artifacts from the registry (BASELINE)"""
     # Pagination parameters

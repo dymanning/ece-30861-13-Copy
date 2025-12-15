@@ -10,7 +10,7 @@ DB_PATH = os.path.join(os.path.dirname(__file__), "phase2.db")
 
 DEFAULT_ADMIN = {
     "username": "ece30861defaultadminuser",
-    "password": "correcthorsebatterystaple123(!__+@**(A;DROP TABLE packages",
+    "password": "'correcthorsebatterystaple123(!__+@**(A;DROP TABLE packages'",
     "role": "admin",
     "permissions": "upload,search,download"
 }
